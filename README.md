@@ -1,3 +1,3 @@
 # Spond-Bot ReadME.md
 
-[View Docker Docs](DOCKER_README.md)
+[View Docker Docs](README_DOCKER.md)
