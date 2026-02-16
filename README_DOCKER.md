@@ -5,7 +5,7 @@ This project is set up to run automatically using Docker and Cron.
 ## Prerequisites
 
 - [Docker](https://www.docker.com/products/docker-desktop/) installed on your server/machine.
-- A valid `.env` file with your Spond credentials (`Spond_USERNAME`, `Spond_PASSWORD`).
+- A valid `.env` file with your Spond credentials (`Spond_USERNAME`, `Spond_PASSWORD`, `Spond_ID`).
 
 ## How it Works
 
