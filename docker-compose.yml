@@ -1,0 +1,12 @@
+services:
+  spond-bot:
+    build: .
+    container_name: spond-bot
+    restart: always
+    environment:
+      - TZ=Europe/Berlin
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - /etc/localtime:/etc/localtime:ro

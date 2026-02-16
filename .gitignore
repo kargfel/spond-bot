@@ -1,0 +1,9 @@
+*.env
+*/__pycache__
+venv/
+.venv/
+Spond/
+spondRE
+upcoming
+login
+
