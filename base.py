@@ -44,7 +44,7 @@ class _SpondBase(ABC):
 
     async def login(self) -> None:
         login_url = f"{self.api_url}login"
-        data = {"email": self.username, "password": self.password}
+        data = {"phoneNumber": self.username, "password": self.password}
         async with self.clientsession.post(login_url, json=data) as r:
             login_result = await r.json()
             self.token = login_result.get("loginToken")
