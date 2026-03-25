@@ -24,7 +24,14 @@ async def check_volleyball_events():
             print(f"Cooling down for {cooldown} seconds.")
             await asyncio.sleep(cooldown)
 
-    nextEventID = events[0]['id']
+    for event in events:
+        if event['heading'] == "DHBW Fortgeschrittene Spieltreff":
+            nextEventID = event['id']
+            break
+    
+    if nextEventID is None:
+        print("No event found.")
+        return
 
     while True:
         if datetime.now(timezone.utc) > start_time + threshold:
