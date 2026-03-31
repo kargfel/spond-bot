@@ -1,55 +1,50 @@
+import logging
 from base import _SpondBase
-
 from datetime import datetime
-
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 from jsondict import JsonDict
-from event_template import _EVENT_TEMPLATE
 
-if TYPE_CHECKING:
-    from datetime import datetime
+logger = logging.getLogger(__name__)
 
 
 class Spond(_SpondBase):
     """Main class for interacting with the Spond API."""
-    _API_BASE_URL = "https://api.spond.com/core/v1/"
-    _DT_FORMAT: ClassVar = "%Y-%m-%dT00:00:00.000Z"
 
-    def __init__(self, username: str, password: str, id: str) -> None:
-        super().__init__(username, password, id, self._API_BASE_URL)
-    
+    _API_BASE_URL = "https://api.spond.com/core/v1/"
+
+    # Timestamp format expected by the Spond API.
+    _DT_FORMAT: ClassVar = "%Y-%m-%dT%H:%M:%S.000Z"
+
+    def __init__(self, username: str, password: str, member_id: str) -> None:
+        super().__init__(username, password, member_id, self._API_BASE_URL)
+
 
     @_SpondBase.require_authentication
     async def get_upcoming_events(
-        self, 
+        self,
         includeDeclined: bool | None = None,
         minEndTimestamp: datetime | None = None,
-    ) -> list[JsonDict] | None:
+    ) -> list[JsonDict]:
         """
-        Retrieve events.
+        Retrieve upcoming events for the authenticated user.
 
         Parameters
         ----------
         includeDeclined : bool, optional
-            Include declined events.
-            Uses `includeDeclined` API parameter.
+            When True, includes events the user has already declined.
         minEndTimestamp : datetime, optional
-            Only include events which end before or at this datetime.
-            Uses `maxEndTimestamp` API parameter; relates to `endTimestamp` event
-            attribute.
+            Only return events whose end time is at or after this datetime.
 
         Returns
         -------
-        list[JSONDict] or None
-             A list of events, each represented as a dictionary, or None if no events
-             are available.
+        list[JsonDict]
+            A list of events, each represented as a dictionary.
 
         Raises
         ------
         ValueError
-            Raised when the request to the API fails. This occurs if the response
-            status code indicates an error (e.g., 4xx or 5xx). The error message
-            includes the HTTP status code and the response body for debugging purposes.
+            Raised when the API returns a non-2xx response. The message includes
+            the HTTP status code and response body for debugging.
         """
         url = f"{self._API_BASE_URL}sponds/upcoming"
         params = {}
@@ -70,38 +65,56 @@ class Spond(_SpondBase):
             return self.events
 
     @_SpondBase.require_authentication
-    async def give_answer(
-        self, 
-        event_id: str, 
-        answer: bool,
-    ) -> None:
+    async def get_groups(self) -> list[JsonDict]:
         """
-        Give an answer to an event.
-
-        Parameters
-        ----------
-        event_id : str
-            The ID of the event to which the answer should be given.
-        answer : bool
-            The answer to the event. Can only be true or false.
+        Retrieve all groups the authenticated user belongs to.
 
         Returns
         -------
-        None
-             None if the request was successful.
+        list[JsonDict]
+            A list of groups, each represented as a dictionary.
 
         Raises
         ------
         ValueError
-            Raised when the request to the API fails. This occurs if the response
-            status code indicates an error (e.g., 4xx or 5xx). The error message
-            includes the HTTP status code and the response body for debugging purposes.
+            Raised when the API returns a non-2xx response.
         """
-        url = f"{self._API_BASE_URL}sponds/{event_id}/responses/{self.id}"
-        data = {
-            "accepted": answer
-        }
-        print(url, data)
+        url = f"{self._API_BASE_URL}groups"
+        async with self.clientsession.get(
+            url, headers=self.auth_headers
+        ) as r:
+            if not r.ok:
+                error_details = await r.text()
+                raise ValueError(
+                    f"Request failed with status {r.status}: {error_details}"
+                )
+            return await r.json()
+
+    @_SpondBase.require_authentication
+    async def give_answer(
+        self,
+        event_id: str,
+        answer: bool,
+    ) -> None:
+        """
+        Submit an RSVP response for a given event.
+
+        Parameters
+        ----------
+        event_id : str
+            The unique ID of the event to respond to.
+        answer : bool
+            True to accept, False to decline.
+
+        Raises
+        ------
+        ValueError
+            Raised when the API returns a non-2xx response. The message includes
+            the HTTP status code and response body for debugging.
+        """
+        url = f"{self._API_BASE_URL}sponds/{event_id}/responses/{self.member_id}"
+        data = {"accepted": answer}
+        logger.debug("Submitting RSVP to %s with payload: %s", url, data)
         async with self.clientsession.put(
             url, headers=self.auth_headers, json=data
         ) as r:
@@ -110,4 +123,3 @@ class Spond(_SpondBase):
                 raise ValueError(
                     f"Request failed with status {r.status}: {error_details}"
                 )
-                

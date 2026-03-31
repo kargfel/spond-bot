@@ -7,6 +7,3 @@ services:
       - TZ=Europe/Berlin
     env_file:
       - .env
-    volumes:
-      - .:/app
-      - /etc/localtime:/etc/localtime:ro

@@ -2,13 +2,13 @@
 .env
 !.env.example
 
+# Python artifacts
 */__pycache__
 __pycache__/
 venv/
 .venv/
 
-# Local data files used during development
-Spond/
-spondRE
-upcoming
-login
+# Development files not needed in the Docker image
+.git
+.gitignore
+README*.md
