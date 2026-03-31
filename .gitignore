@@ -1,10 +1,18 @@
-*.env
+# [AUDIT FIX] Replaced `*.env` glob with explicit `.env` + negation of .env.example.
+# The glob `*.env` matched both `.env` AND `.env.example`, meaning the example
+# template file (which SHOULD be committed to source control) could be silently
+# excluded by some git client implementations. The explicit pattern below is
+# unambiguous: ignore only the real secrets file, never the example. (audit: .gitignore L1)
+.env
+!.env.example
+
 */__pycache__
 __pycache__/
 venv/
 .venv/
+
+# Local data files used during development (not needed in source control)
 Spond/
 spondRE
 upcoming
 login
-

@@ -5,8 +5,19 @@ services:
     restart: always
     environment:
       - TZ=Europe/Berlin
+      - CRON_SCHEDULE=00 16 * * 4
     env_file:
       - .env
-    volumes:
-      - .:/app
-      - /etc/localtime:/etc/localtime:ro
+    # [AUDIT FIX] Removed `- .:/app` host bind-mount.
+    # That mount overwrote everything copied into the image during `docker build`,
+    # including pip-installed packages, making the build step effectively useless.
+    # It also injected local dev artifacts (venv/, __pycache__, .env) into the
+    # running container and tightly coupled the container to the host filesystem.
+    # The production container should run the immutable built image exclusively.
+    # For local development with live-reload, add an override file instead:
+    #   docker-compose.override.yml → volumes: [".:/app"]
+    # (audit: docker-compose.yml L12)
+    #
+    # [AUDIT FIX] /etc/localtime mount also removed: TZ env var + tzdata (already
+    # installed in the Dockerfile) is the correct, portable way to set the timezone
+    # inside a container without binding to the host's localtime file.
