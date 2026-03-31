@@ -45,7 +45,11 @@ echo "CRON_TZ=${TZ:-Europe/Berlin}" > /etc/cron.d/spond-cron\n\
 echo "${CRON_SCHEDULE:-0 16 * * 4} root . /etc/environment; cd /app && /usr/local/bin/python spond_bot.py >> /proc/1/fd/1 2>&1" >> /etc/cron.d/spond-cron\n\
 \n\
 chmod 0644 /etc/cron.d/spond-cron\n\
-crontab /etc/cron.d/spond-cron\n\
+# NOTE: Do NOT call `crontab /etc/cron.d/spond-cron` here.\n\
+# Files dropped into /etc/cron.d/ are loaded automatically by the system cron\n\
+# daemon. Calling `crontab` additionally installs the same job as root's\n\
+# personal crontab (different format, no user field), causing a double\n\
+# execution at the exact same second.\n\
 \n\
 echo "Cron started... Schedule: ${CRON_SCHEDULE:-0 16 * * 4} ($TZ Time)"\n\
 cron -f' > /entrypoint.sh && chmod +x /entrypoint.sh
