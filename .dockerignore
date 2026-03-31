@@ -1,19 +1,14 @@
-# Prevent credentials and dev artifacts from being baked into the Docker image.
-# SECURITY: Without this file, "COPY . ." in the Dockerfile would copy .env
-# (containing plaintext passwords) into a permanent, inspectable image layer.
+# Credentials — never commit the real .env file
 .env
-*.env
+!.env.example
 
-# Version control — not needed at runtime
-.git
-.gitignore
-
-# Development artifacts — not needed at runtime
+# Python artifacts
+*/__pycache__
+__pycache__/
 venv/
 .venv/
-__pycache__/
-*.pyc
-*.pyo
 
-# Documentation
+# Development files not needed in the Docker image
+.git
+.gitignore
 README*.md

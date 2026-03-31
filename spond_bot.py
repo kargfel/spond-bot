@@ -7,14 +7,8 @@ from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from spond import Spond
 
-# [AUDIT FIX] Removed unused `import time` (audit: spond_bot.py:6)
-
 load_dotenv()
 
-# [AUDIT FIX] Replaced all raw print() calls with structured logging.
-# This enables log levels (INFO/WARNING/ERROR/DEBUG), is compatible with
-# container log aggregators, and can be silenced in tests without patching
-# sys.stdout. (audit: Step 7 — Add logging module throughout)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -24,12 +18,10 @@ logger = logging.getLogger(__name__)
 
 def _get_int_env(name: str, default: int) -> int:
     """
-    Read an integer environment variable with a safe fallback.
+    Read an integer environment variable, falling back to `default` on invalid input.
 
-    [AUDIT FIX] Previously, int(os.getenv(...)) would raise an unhandled
-    ValueError for non-numeric input (e.g. SPOND_POLL_TIMEOUT_MINUTES=abc).
-    This helper catches that and falls back to the documented default.
-    (audit: spond_bot.py L20-23)
+    Logs a warning if the value cannot be parsed so misconfigured variables are
+    visible in the container logs rather than causing an unhandled crash.
     """
     raw = os.getenv(name, str(default))
     try:
@@ -48,7 +40,6 @@ async def monitor_spond_events() -> None:
     spond_pass = os.getenv("SPOND_PASSWORD")
     target_heading = os.getenv("SPOND_TARGET_EVENT_HEADING")
 
-    # Load configurable timings via the validated helper (no crash on bad input)
     poll_timeout = _get_int_env("SPOND_POLL_TIMEOUT_MINUTES", 5)
     min_cooldown = _get_int_env("SPOND_MIN_COOLDOWN_SECONDS", 1)
     max_cooldown = _get_int_env("SPOND_MAX_COOLDOWN_SECONDS", 5)
@@ -71,9 +62,6 @@ async def monitor_spond_events() -> None:
         logger.info("SPOND_ID not found in .env — attempting auto-discovery via API...")
 
         try:
-            # [AUDIT FIX] Pass pre-validated credentials directly instead of having
-            # get_spond_id() redundantly re-read env vars and create a new session
-            # without context of the already-validated credentials. (audit: L43)
             spond_id = await get_spond_id(spond_user, spond_pass)
         except Exception as e:
             logger.error("Error fetching ID: %s", e)
@@ -87,11 +75,8 @@ async def monitor_spond_events() -> None:
 
     s = Spond(spond_user, spond_pass, spond_id)
 
-    # [AUDIT FIX] Wrapped all bot logic in try/finally to guarantee the aiohttp
-    # ClientSession is closed on EVERY exit path — including early returns (no event
-    # found, threshold reached) and unhandled exceptions. Previously, the session was
-    # only closed at the end of the happy path, leaking sockets on all other paths.
-    # (audit: spond_bot.py L98)
+    # The session is closed in a finally block to guarantee cleanup on every exit
+    # path: normal completion, no matching event found, timeout, or raised exception.
     try:
         start_time = datetime.now(timezone.utc)
         threshold = timedelta(minutes=poll_timeout)
@@ -107,10 +92,6 @@ async def monitor_spond_events() -> None:
                 logger.info("Cooling down for %d seconds.", cooldown)
                 await asyncio.sleep(cooldown)
 
-        # [AUDIT FIX] Initialise next_event_id to None BEFORE the loop.
-        # Previously, if no event matched the heading, the variable was never assigned
-        # and the subsequent `if nextEventID is None` raised a NameError, crashing the
-        # bot. This is the most critical bug in the original code. (audit: L68-75)
         next_event_id = None
         for event in events:
             if event["heading"] == target_heading:
@@ -137,10 +118,9 @@ async def monitor_spond_events() -> None:
                 error_msg = str(e)
                 logger.warning("Attempt failed: %s", error_msg)
 
-                # [AUDIT FIX] Detect 403 by matching the structured ValueError message
-                # produced by spond.py ("status 403") rather than searching the whole
-                # error string for "403", which would falsely match URLs or other data
-                # containing that digit sequence. (audit: L89)
+                # Match against the structured error message raised by give_answer()
+                # (e.g. "Request failed with status 403: ...") to avoid false positives
+                # from the digit sequence "403" appearing elsewhere in the error string.
                 if "status 403" in error_msg:
                     cooldown = random.randint(min_cooldown, max_cooldown)
                     logger.info(
@@ -163,13 +143,12 @@ async def get_spond_id(username: str, password: str) -> str | None:
     """
     Auto-discover the caller's Spond member ID by scanning group memberships.
 
-    [AUDIT FIX] Accepts pre-validated credentials as parameters instead of
-    re-reading os.getenv() internally. This removes the hidden coupling to the
-    environment, makes the function testable in isolation, and avoids a second
-    redundant Spond/ClientSession construction inside the main flow. (audit: L43)
+    Searches all groups the authenticated user belongs to, matching members by
+    email address or phone number against the provided `username`. Returns the
+    member ID on the first match, or None if no match is found.
 
-    The temporary ClientSession is now closed in a finally block so it is
-    guaranteed to close even if get_groups() raises. (audit: L98 pattern)
+    A dedicated Spond session is created for the lookup and is always closed
+    on exit, regardless of whether the request succeeds or raises.
     """
     s = Spond(username, password, "")
     try:
@@ -178,7 +157,6 @@ async def get_spond_id(username: str, password: str) -> str | None:
         logger.error("Failed to fetch groups: %s", e)
         return None
     finally:
-        # Close the temporary session used solely for ID discovery
         await s.clientsession.close()
 
     if not groups:

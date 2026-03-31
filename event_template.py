@@ -1,11 +1,11 @@
-"""Module contains template event data, to be used as a base when updating events."""
+"""Template structure for Spond event payloads."""
 
 import copy
 
 from jsondict import JsonDict
 
-# Private backing store — do NOT import or mutate this directly.
-# Use the get_event_template() factory function instead.
+# Internal template — not intended for direct import.
+# Use get_event_template() to obtain a fresh, independent copy.
 _EVENT_TEMPLATE: JsonDict = {
     "heading": None,
     "description": None,
@@ -48,12 +48,10 @@ _EVENT_TEMPLATE: JsonDict = {
 
 def get_event_template() -> JsonDict:
     """
-    Return a fresh deep copy of the event template dict.
+    Return a fresh copy of the default event template.
 
-    [AUDIT FIX] The previous pattern exposed the module-level dict directly,
-    meaning any caller that mutated it (e.g. template["heading"] = "Foo") would
-    permanently corrupt the shared object for every subsequent call in the same
-    process. Using copy.deepcopy() here guarantees each caller gets an independent
-    copy, eliminating that class of cross-call contamination bugs. (audit: event_template.py L5)
+    Always use this function instead of importing the module-level dict directly.
+    Each call returns an independent deep copy, so modifications made by one
+    caller do not affect subsequent callers.
     """
     return copy.deepcopy(_EVENT_TEMPLATE)
