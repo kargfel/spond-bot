@@ -5,6 +5,5 @@ services:
     restart: always
     environment:
       - TZ=Europe/Berlin
-      - CRON_SCHEDULE=00 16 * * 4
     env_file:
       - .env
