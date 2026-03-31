@@ -27,13 +27,22 @@ RUN touch /var/log/cron.log
 # the sleep was only needed if the script ran immediately at boot, which weekly/daily
 # cron jobs do not. The echo startup message provides sufficient boot confirmation.
 # (audit: Dockerfile L23)
+# FIX: cron spawns jobs with a minimal, clean environment — it does NOT inherit
+# the env vars that Docker injects into PID 1. The fix is to dump the full
+# container environment to /etc/environment at startup and then explicitly
+# source that file inside the cron job command before running Python.
 RUN echo '#!/bin/sh\n\
 # Set the timezone for the OS\n\
 ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone\n\
 \n\
+# Dump all Docker-injected environment variables to /etc/environment so that\n\
+# cron job child processes can source them. Without this, cron runs Python\n\
+# with a near-empty environment and os.getenv() returns None for everything.\n\
+printenv > /etc/environment\n\
+\n\
 # Create the crontab file with explicit environment interpolation\n\
 echo "CRON_TZ=${TZ:-Europe/Berlin}" > /etc/cron.d/spond-cron\n\
-echo "${CRON_SCHEDULE:-0 16 * * 4} root cd /app && /usr/local/bin/python spond_bot.py >> /proc/1/fd/1 2>&1" >> /etc/cron.d/spond-cron\n\
+echo "${CRON_SCHEDULE:-0 16 * * 4} root . /etc/environment; cd /app && /usr/local/bin/python spond_bot.py >> /proc/1/fd/1 2>&1" >> /etc/cron.d/spond-cron\n\
 \n\
 chmod 0644 /etc/cron.d/spond-cron\n\
 crontab /etc/cron.d/spond-cron\n\
