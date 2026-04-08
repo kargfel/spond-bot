@@ -1,14 +1,34 @@
-# Credentials — never commit the real .env file
-.env
-!.env.example
-
-# Python artifacts
-*/__pycache__
+# Python cache
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
 venv/
 .venv/
+env/
 
-# Development files not needed in the Docker image
-.git
+# Environment files (never bake into image)
+.env
+
+# Development / IDE
+.vscode/
+.idea/
+*.swp
+
+# Alembic versions are included — migrations run at container start
+# Git history is not needed in the image
+.git/
 .gitignore
-README*.md
+
+# Docs and design artefacts
+*.md
+spond_swagger_ui.html
+_Multi-User*
+
+# Test artefacts
+.pytest_cache/
+htmlcov/
+.coverage

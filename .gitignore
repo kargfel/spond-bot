@@ -12,3 +12,7 @@ Spond/
 spondRE
 upcoming
 login
+
+# Debug & temp files generated during development
+_debug/
+

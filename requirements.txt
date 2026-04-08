@@ -1,3 +1,24 @@
-aiohttp==3.13.4
-python-dotenv==1.2.2
+# Web framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
+# Database
+sqlalchemy[asyncio]>=2.0.0
+asyncpg>=0.29.0
+alembic>=1.14.0
+
+# Task scheduling
+apscheduler>=3.10.0
+
+# Security
+cryptography>=42.0.0
+
+# Config management
+pydantic-settings>=2.6.0
+
+# HTTP client (Spond API)
+aiohttp>=3.13.4
+
+# Utilities
+python-dotenv>=1.2.2
 jsondict==1.2
