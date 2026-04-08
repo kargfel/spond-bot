@@ -1,0 +1,2269 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spond API Documentation (Reverse Engineered)</title>
+    <meta
+      name="description"
+      content="Unofficial Swagger UI documentation for the Spond API, reverse-engineered from iOS app network traffic."
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css"
+    />
+    <style>
+      :root {
+        --bg: #0d1117;
+        --surface: #161b22;
+        --surface2: #21262d;
+        --accent: #7c3aed;
+        --accent2: #a78bfa;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --border: #30363d;
+        --warning: #d29922;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Inter", system-ui, sans-serif;
+      }
+
+      #header {
+        background: linear-gradient(135deg, #1e0a3c 0%, #0d1117 60%);
+        border-bottom: 1px solid var(--border);
+        padding: 24px 32px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      #header h1 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        background: linear-gradient(90deg, #a78bfa, #60a5fa);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      #header p {
+        color: var(--muted);
+        font-size: 0.85rem;
+        margin-top: 4px;
+      }
+      .badge {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 0.75rem;
+        color: var(--muted);
+      }
+      .badge-warn {
+        background: #2d1f00;
+        border-color: var(--warning);
+        color: var(--warning);
+      }
+
+      .notice-bar {
+        background: #1c1300;
+        border-bottom: 1px solid #3d2b00;
+        padding: 10px 32px;
+        font-size: 0.8rem;
+        color: #d29922;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      #swagger-ui {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      /* Swagger UI overrides */
+      .swagger-ui {
+        background: transparent;
+      }
+      .swagger-ui .topbar {
+        display: none;
+      }
+      .swagger-ui .info {
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 24px;
+      }
+      .swagger-ui .info .title {
+        color: var(--text);
+        font-size: 1.6rem;
+      }
+      .swagger-ui .info .description p,
+      .swagger-ui .info .description li {
+        color: var(--muted);
+      }
+      .swagger-ui .info .description h3 {
+        color: var(--accent2);
+        margin: 12px 0 6px;
+      }
+      .swagger-ui .info .description table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      .swagger-ui .info .description td,
+      .swagger-ui .info .description th {
+        border: 1px solid var(--border);
+        padding: 6px 10px;
+        color: var(--muted);
+      }
+      .swagger-ui .opblock-tag {
+        border-bottom: 1px solid var(--border);
+        color: var(--text);
+        font-size: 1rem;
+      }
+      .swagger-ui .opblock-tag:hover {
+        background: var(--surface2);
+      }
+      .swagger-ui .opblock {
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        margin-bottom: 8px;
+        background: var(--surface);
+      }
+      .swagger-ui .opblock .opblock-summary {
+        border-radius: 8px;
+      }
+      .swagger-ui .opblock.opblock-get .opblock-summary { border-left: 4px solid #1f6feb; }
+      .swagger-ui .opblock.opblock-post .opblock-summary { border-left: 4px solid #238636; }
+      .swagger-ui .opblock.opblock-put .opblock-summary {
+        border-left: 4px solid #9e6a03;
+      }
+      .swagger-ui .opblock.opblock-delete .opblock-summary {
+        border-left: 4px solid #da3633;
+      }
+      .swagger-ui .opblock .opblock-summary-description {
+        color: var(--muted);
+      }
+      .swagger-ui .opblock-description-wrapper p {
+        color: var(--muted);
+      }
+      .swagger-ui .model-box {
+        background: var(--surface2);
+        border-radius: 6px;
+      }
+      .swagger-ui section.models {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+      }
+      .swagger-ui section.models h4 {
+        color: var(--text);
+      }
+      .swagger-ui .prop-type {
+        color: var(--accent2);
+      }
+      .swagger-ui table thead tr th {
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+      }
+      .swagger-ui .parameter__name {
+        color: var(--text);
+      }
+      .swagger-ui .parameter__type {
+        color: var(--accent2);
+      }
+      .swagger-ui input[type="text"],
+      .swagger-ui textarea {
+        background: var(--surface2);
+        border-color: var(--border);
+        color: var(--text);
+      }
+      .swagger-ui select {
+        background: var(--surface2);
+        border-color: var(--border);
+        color: var(--text);
+      }
+      .swagger-ui .btn {
+        border-radius: 6px;
+      }
+      .swagger-ui .btn.execute {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .swagger-ui .response-col_status {
+        color: var(--accent2);
+      }
+      .swagger-ui .markdown code,
+      .swagger-ui .renderedMarkdown code {
+        background: var(--surface2);
+        border-radius: 4px;
+        padding: 2px 5px;
+        color: #f97316;
+      }
+      .swagger-ui .filter-container input {
+        background: var(--surface2);
+        border-color: var(--border);
+        color: var(--text);
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="header">
+      <div>
+        <h1>🏐 Spond API — Reverse Engineered Documentation</h1>
+        <p>
+          Based on network traffic captured from
+          <strong>Spond iOS v2.7.11</strong>
+        </p>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto">
+        <span class="badge">OpenAPI 3.0</span>
+        <span class="badge">Core v1 API</span>
+        <span class="badge">Chat v1 API</span>
+        <span class="badge badge-warn">⚠ Unofficial</span>
+      </div>
+    </div>
+    <div class="notice-bar">
+      ⚠ This documentation is reverse-engineered and unofficial. Endpoints may
+      change without notice. Handle captured data securely — do not commit
+      tokens or personal data to public repositories.
+    </div>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script>
+      const spec = {
+        openapi: "3.0.0",
+        info: {
+          title: "Spond API (Reverse Engineered)",
+          version: "2.7.11",
+          description: `## Overview
+Spond is a sports group management and event scheduling platform. This documentation covers the API endpoints discovered by analysing iOS app traffic (Spond-iOS/2.7.11).
+
+### Authentication
+All endpoints (except \`/auth2/login\`) require a **Bearer JWT access token** obtained from the login response.
+
+**Token Lifetimes:**
+- \`accessToken\` — short-lived (~24h). Pass as \`Authorization: Bearer <token>\`
+- \`refreshToken\` — long-lived (~90 days). Use to obtain new accessTokens
+- \`passwordToken\` — very short-lived (~10 min)
+
+### Two API Bases
+- **Core API**: \`https://api.spond.com/core/v1/\`
+- **Chat API**: \`https://api.spond.com/chat/v1/\` — requires a separate \`auth\` token via \`POST /core/v1/chat\`
+- **Storage API**: \`https://api.spond.com/storage/\`
+- **Feature Flags**: \`https://features.spond.com/proxy\` — Unleash feature toggles
+
+### Common Request Headers
+| Header | Example Value |
+|--------|---------------|
+| \`Authorization\` | \`Bearer eyJ...\` |
+| \`x-spond-timezone\` | \`Europe/Berlin\` |
+| \`user-agent\` | \`Spond-iOS/2.7.11 (2264; iPhone; iOS 26.3.1; Scale/3.00)\` |
+| \`accept\` | \`application/json\` |
+| \`accept-language\` | \`de\` |
+
+### Resource IDs
+All resource IDs are **32-character uppercase hex strings**, e.g. \`6C390D3BDD694559AE750CCC9ABBB350\`
+`,
+          contact: { name: "Unofficial — no support" },
+        },
+        servers: [
+          { url: "https://api.spond.com", description: "Spond Production API" },
+        ],
+        components: {
+          securitySchemes: {
+            bearerAuth: {
+              type: "http",
+              scheme: "bearer",
+              bearerFormat: "JWT",
+              description:
+                "Access token from POST /core/v1/auth2/login → accessToken.token",
+            },
+            chatAuth: {
+              type: "apiKey",
+              in: "header",
+              name: "auth",
+              description:
+                "Chat auth token from POST /core/v1/chat → auth field",
+            },
+          },
+          schemas: {
+            LoginRequest: {
+              type: "object",
+              required: ["email", "password"],
+              properties: {
+                email: {
+                  type: "string",
+                  format: "email",
+                  example: "user@example.com",
+                },
+                password: { type: "string", format: "password" },
+              },
+            },
+            LoginResponse: {
+              type: "object",
+              properties: {
+                loginId: { type: "string" },
+                accessToken: {
+                  type: "object",
+                  properties: {
+                    token: {
+                      type: "string",
+                      description: "JWT access token — use as Bearer token",
+                    },
+                    expirationDate: { type: "string", format: "date-time" },
+                  },
+                },
+                refreshToken: {
+                  type: "object",
+                  properties: {
+                    token: { type: "string" },
+                    expirationDate: { type: "string", format: "date-time" },
+                  },
+                },
+                passwordToken: {
+                  type: "object",
+                  properties: {
+                    token: { type: "string" },
+                    expirationDate: { type: "string", format: "date-time" },
+                  },
+                },
+              },
+            },
+            Profile: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: "32-char uppercase hex ID" },
+                firstName: { type: "string" },
+                lastName: { type: "string" },
+                imageUrl: { type: "string", format: "uri" },
+                email: {
+                  type: "string",
+                  format: "email",
+                  description: "Only present for own profile",
+                },
+                phoneNumber: {
+                  type: "string",
+                  description: "Only present for own profile",
+                },
+                locale: { type: "string", example: "de_DE" },
+                countryCode: { type: "string", example: "DEU" },
+                dummy: {
+                  type: "boolean",
+                  description: "Placeholder/dummy account",
+                },
+                deleted: { type: "boolean" },
+                contactMethod: {
+                  type: "string",
+                  enum: ["app", "email", "sms"],
+                },
+                unableToReach: { type: "boolean" },
+                contact: { type: "boolean" },
+              },
+            },
+            GroupMember: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                firstName: { type: "string" },
+                lastName: { type: "string" },
+                imageUrl: { type: "string", format: "uri" },
+                roles: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Role IDs this member has",
+                },
+                subGroups: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Sub-group IDs this member belongs to",
+                },
+                guardians: { type: "array", items: { type: "object" } },
+                registrationStatus: { type: "string" },
+                createdTime: { type: "string", format: "date-time" },
+              },
+            },
+            GroupRole: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                name: { type: "string", example: "Admin" },
+                adminRole: { type: "boolean" },
+              },
+            },
+            Group: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                name: { type: "string" },
+                activity: { type: "string", example: "volleyball" },
+                signupUrl: {
+                  type: "string",
+                  format: "uri",
+                  example: "https://spond.com/invite/LFVOG",
+                  description: "Public join link",
+                },
+                imageUrl: { type: "string", format: "uri" },
+                countryCode: { type: "string" },
+                contactInfoHidden: { type: "boolean" },
+                memberPermissions: { type: "array", items: { type: "string" } },
+                bonusEnabled: { type: "boolean" },
+                members: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/GroupMember" },
+                },
+                subGroups: { type: "array", items: { type: "object" } },
+                roles: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/GroupRole" },
+                },
+                fieldDefs: {
+                  type: "array",
+                  items: { type: "object" },
+                  description: "Custom field definitions",
+                },
+                defaultFields: {
+                  type: "object",
+                  description:
+                    "Visibility of built-in fields (address, DOB, guardian)",
+                },
+                addressFormat: { type: "array", items: { type: "string" } },
+              },
+            },
+            EventOwner: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                response: {
+                  type: "string",
+                  enum: ["accepted", "declined", "unanswered"],
+                },
+              },
+            },
+            EventResponses: {
+              type: "object",
+              description: "RSVP state for all invited members",
+              properties: {
+                acceptedIds: { type: "array", items: { type: "string" } },
+                declinedIds: { type: "array", items: { type: "string" } },
+                unansweredIds: { type: "array", items: { type: "string" } },
+                waitinglistIds: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Members on waitlist (event is full)",
+                },
+                unconfirmedIds: { type: "array", items: { type: "string" } },
+              },
+            },
+            Event: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                creatorId: { type: "string" },
+                owners: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/EventOwner" },
+                },
+                heading: { type: "string" },
+                description: { type: "string" },
+                startTimestamp: { type: "string", format: "date-time" },
+                endTimestamp: { type: "string", format: "date-time" },
+                createdTime: { type: "string", format: "date-time" },
+                updated: {
+                  type: "integer",
+                  description: "Unix epoch milliseconds of last update",
+                },
+                recipients: {
+                  type: "object",
+                  properties: {
+                    group: {
+                      type: "object",
+                      properties: { id: { type: "string" } },
+                    },
+                    profiles: { type: "array", items: { type: "string" } },
+                    guardians: { type: "array", items: { type: "string" } },
+                  },
+                },
+                responses: { $ref: "#/components/schemas/EventResponses" },
+                tasks: {
+                  type: "object",
+                  properties: {
+                    openTasks: { type: "array", items: { type: "object" } },
+                    assignedTasks: { type: "array", items: { type: "object" } },
+                  },
+                },
+                attachments: { type: "array", items: { type: "object" } },
+                comments: { type: "array", items: { type: "object" } },
+                seriesId: {
+                  type: "string",
+                  description:
+                    "ID of the recurring series this event belongs to",
+                },
+                seriesOrdinal: {
+                  type: "integer",
+                  description: "Position index in the series",
+                },
+                modifiedFromSeries: {
+                  type: "boolean",
+                  description: "True if this instance was individually edited",
+                },
+                cancelled: { type: "boolean" },
+                cancelledReason: { type: "string" },
+                type: { type: "string", enum: ["RECURRING", "SINGLE"] },
+                visibility: { type: "string", enum: ["ALL", "SUBGROUP"] },
+                rsvpDate: {
+                  type: "string",
+                  format: "date-time",
+                  description: "RSVP deadline",
+                },
+                inviteTime: {
+                  type: "string",
+                  format: "date-time",
+                  description: "When invitations are sent",
+                },
+                maxAccepted: {
+                  type: "integer",
+                  description: "Max participant cap",
+                },
+                autoAccept: { type: "boolean" },
+                hidden: { type: "boolean" },
+                behalfOfIds: {
+                  type: "array",
+                  items: { type: "string" },
+                  description:
+                    "Profile IDs that can RSVP on behalf of the event creator",
+                },
+                autoReminderType: {
+                  type: "string",
+                  enum: ["DISABLED", "BEFORE_RSVP", "BEFORE_EVENT"],
+                },
+                participantsHidden: { type: "boolean" },
+                registered: { type: "boolean" },
+                commentsDisabled: { type: "boolean" },
+                matchEvent: { type: "boolean" },
+                expired: { type: "boolean" },
+              },
+            },
+            EventSummary: {
+              type: "object",
+              description: "Lightweight event returned by /upcoming",
+              properties: {
+                id: { type: "string" },
+                updated: {
+                  type: "integer",
+                  description: "Unix epoch milliseconds",
+                },
+                startTime: { type: "string", format: "date-time" },
+                heading: { type: "string" },
+                series: { type: "boolean" },
+              },
+            },
+            Post: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                type: { type: "string", enum: ["PLAIN", "PAYMENT", "POLL"] },
+                groupId: { type: "string" },
+                title: { type: "string" },
+                body: { type: "string" },
+                ownerId: { type: "string" },
+                timestamp: { type: "string", format: "date-time" },
+                visibility: { type: "string", enum: ["ALL", "SUBGROUP"] },
+                unread: { type: "boolean" },
+                commentsDisabled: { type: "boolean" },
+                muted: { type: "boolean" },
+                poll: { $ref: "#/components/schemas/Poll" },
+              },
+            },
+            Poll: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                question: { type: "string" },
+                multipleChoice: { type: "boolean" },
+                dueBy: { type: "string", format: "date-time" },
+                expired: { type: "boolean" },
+                hideVotes: { type: "boolean" },
+                options: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      text: { type: "string" },
+                      votes: { type: "array", items: { type: "string" } },
+                    },
+                  },
+                },
+              },
+            },
+            ContactPoint: {
+              type: "object",
+              properties: {
+                emailAddress: { type: "string", format: "email" },
+                phoneNumber: { type: "string" },
+                primary: { type: "boolean" },
+                verified: { type: "boolean" },
+              },
+            },
+            ChatInitResponse: {
+              type: "object",
+              properties: {
+                url: {
+                  type: "string",
+                  format: "uri",
+                  description: "Chat API base URL",
+                },
+                auth: {
+                  type: "string",
+                  description:
+                    "Token to pass as 'auth' header on chat requests",
+                },
+              },
+            },
+            ChatConversation: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                name: { type: "string" },
+                type: { type: "string", enum: ["GROUP", "DM"] },
+                groupId: { type: "string" },
+                participants: { type: "array", items: { type: "string" } },
+                newestTimestamp: { type: "string", format: "date-time" },
+                unread: { type: "boolean" },
+                muted: { type: "boolean" },
+              },
+            },
+            ChatMessage: {
+              type: "object",
+              properties: {
+                chatId: { type: "string" },
+                msgNum: { type: "integer" },
+                user: { type: "string", description: "Profile ID of sender" },
+                type: {
+                  type: "string",
+                  enum: ["TEXT", "RENAME", "IMAGE", "FILE"],
+                },
+                text: { type: "string" },
+                timestamp: { type: "string", format: "date-time" },
+              },
+            },
+            DeviceRegistration: {
+              type: "object",
+              required: ["pushToken", "name"],
+              properties: {
+                pushToken: {
+                  type: "string",
+                  description: "APNs or FCM device token",
+                },
+                name: { type: "string", example: "iPhone" },
+                production: {
+                  type: "boolean",
+                  description: "true = production APNs",
+                },
+              },
+            },
+            CurrencyInfo: {
+              type: "object",
+              properties: {
+                code: { type: "string", example: "EUR" },
+                name: { type: "string", example: "euros" },
+                divisor: { type: "integer", example: 100 },
+                decimals: { type: "integer", example: 2 },
+                simpleFormat: { type: "string", example: "€{}" },
+              },
+            },
+            AppConfig: {
+              type: "object",
+              properties: {
+                maxVideoUploadSize: { type: "integer", example: 1000000000 },
+                maxVideoUploadLength: {
+                  type: "integer",
+                  description: "Max video length in seconds",
+                  example: 600,
+                },
+              },
+            },
+            StorageRestrictions: {
+              type: "object",
+              properties: {
+                maxSize: {
+                  type: "integer",
+                  example: 100000000,
+                  description: "Max file upload size in bytes",
+                },
+              },
+            },
+            ProfileHashResponse: {
+              type: "object",
+              properties: {
+                webUserHash: { type: "string" },
+                androidUserHash: { type: "string" },
+                iosUserHash: { type: "string" },
+                value: { type: "string" },
+              },
+            },
+          },
+        },
+        security: [{ bearerAuth: [] }],
+        tags: [
+          {
+            name: "Authentication",
+            description:
+              "Login, logout, token refresh — login requires no auth",
+          },
+          {
+            name: "Profile",
+            description: "Current user's profile, contact points, hashes",
+          },
+          {
+            name: "Groups",
+            description: "Group membership, roles, sub-groups, invitations",
+          },
+          {
+            name: "Events (Sponds)",
+            description:
+              "Create, fetch, and RSVP to events. Spond calls events 'sponds'.",
+          },
+          {
+            name: "Posts & Polls",
+            description: "Group announcements, polls, and payment posts",
+          },
+          {
+            name: "Chat",
+            description:
+              "Chat conversations and messages (requires separate auth token)",
+          },
+          {
+            name: "Payments",
+            description: "Payout accounts and payment methods",
+          },
+          {
+            name: "Feature Flags",
+            description:
+              "Unleash feature toggles served from features.spond.com",
+          },
+          {
+            name: "Misc",
+            description:
+              "Device registration, config, clock, activities, promos, lineups",
+          },
+        ],
+        paths: {
+          // ─── Authentication ───────────────────────────────────────────────────────
+          "/core/v1/auth2/login": {
+            post: {
+              tags: ["Authentication"],
+              summary: "Login with email/phone and password",
+              description: `Authenticates the user. Returns three tokens:
+- **accessToken** — short-lived JWT (~24h). Pass as \`Authorization: Bearer <token>\` on all requests.
+- **refreshToken** — long-lived (~90 days). Use to get new accessTokens.
+- **passwordToken** — very short-lived (~10 min).
+
+The accessToken is a base64-encoded JWT. Decode it to inspect claims like \`sub\` (user ID) and \`exp\`.`,
+              security: [],
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: { $ref: "#/components/schemas/LoginRequest" },
+                    example: {
+                      email: "user@example.com",
+                      password: "myPassword123",
+                    },
+                  },
+                },
+              },
+              responses: {
+                200: {
+                  description: "Login successful",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/LoginResponse" },
+                    },
+                  },
+                },
+                401: { description: "Invalid credentials" },
+              },
+            },
+          },
+
+          "/core/v1/auth2/logout": {
+            post: {
+              tags: ["Authentication"],
+              summary: "Logout — invalidate session",
+              description: `Logs out the current session and deregisters the device from push notifications.
+
+Pass the device ID in the request body (SHA-256 hex of device identifier).`,
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        deviceId: {
+                          type: "string",
+                          description: "SHA-256 hex device identifier",
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              responses: {
+                200: { description: "Logged out successfully (empty body)" },
+              },
+            },
+          },
+
+          // ─── Profile ──────────────────────────────────────────────────────────────
+          "/core/v1/profile": {
+            get: {
+              tags: ["Profile"],
+              summary: "Get authenticated user's own profile",
+              description:
+                "Returns the full profile of the currently logged-in user including locale, notification settings, and preferences.",
+              responses: {
+                200: {
+                  description: "Full profile",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/Profile" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/profiles": {
+            get: {
+              tags: ["Profile"],
+              summary: "List profiles visible to the user",
+              description:
+                "Returns profiles of members in shared groups. For your own profile, extra fields (email, phone) are included.",
+              parameters: [
+                {
+                  name: "maxResults",
+                  in: "query",
+                  schema: { type: "integer", default: 500 },
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Array of profiles",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/Profile" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/profiles/lookup": {
+            put: {
+              tags: ["Profile"],
+              summary: "Bulk lookup profiles by ID array",
+              description: `Resolve public profile info for an array of profile IDs. The app calls this after loading events/posts to resolve names and avatars.
+
+**Request body:** JSON array of profile ID strings (max ~25 per call observed in traffic).
+
+Returns only public fields: \`id\`, \`firstName\`, \`lastName\`, \`imageUrl\`, \`dummy\`, \`deleted\`, \`contactMethod\`.`,
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "array",
+                      items: { type: "string" },
+                      example: [
+                        "CEFB76A2E59C1102E8480449EC5B251C",
+                        "AD4A4C650A9D8A4E21296874C82FA34E",
+                      ],
+                    },
+                  },
+                },
+              },
+              responses: {
+                200: {
+                  description: "Array of public profile objects",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/Profile" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/profile/hash": {
+            get: {
+              tags: ["Profile"],
+              summary: "Get user hash values",
+              description:
+                "Returns deterministic hashes of the user's identity for web/android/ios. Used for analytics integrations like Intercom.",
+              responses: {
+                200: {
+                  description: "Hash values",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/ProfileHashResponse",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/profile/fundraisingToken": {
+            get: {
+              tags: ["Profile"],
+              summary: "Get fundraising JWT token",
+              responses: {
+                200: {
+                  description: "Fundraising token",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: { value: { type: "string" } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/profile/fundraising": {
+            get: {
+              tags: ["Profile"],
+              summary: "Get fundraising feature availability",
+              responses: {
+                200: {
+                  description: "Fundraising feature flags",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          fundraising: { type: "boolean" },
+                          campaigns: { type: "boolean" },
+                          campaignsAvailable: { type: "boolean" },
+                          cashback: { type: "boolean" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/profile/hasGroups": {
+            get: {
+              tags: ["Profile"],
+              summary: "Check if user belongs to any groups",
+              responses: {
+                200: {
+                  description: "Group membership status",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          profileHasGroups: { type: "boolean" },
+                          contactPointsWithGroupCounts: {
+                            type: "array",
+                            items: { type: "object" },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/contactPoints": {
+            get: {
+              tags: ["Profile"],
+              summary: "List contact points (email/phone)",
+              description:
+                "Returns all verified email addresses and phone numbers registered for the user.",
+              responses: {
+                200: {
+                  description: "Contact points",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/ContactPoint" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          // ─── Groups ───────────────────────────────────────────────────────────────
+          "/core/v1/groups": {
+            get: {
+              tags: ["Groups"],
+              summary: "List all groups the user belongs to",
+              description: `Returns full group objects for every group the user is in. Very rich response including:
+- **members[]** — all members with profiles, roles, sub-groups
+- **roles[]** — admin-defined roles
+- **subGroups[]** — sub-group definitions
+- **fieldDefs[]** — custom field definitions
+- **signupUrl** — public invite link e.g. \`https://spond.com/invite/LFVOG\``,
+              responses: {
+                200: {
+                  description: "Array of groups",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/Group" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/groups/favorites": {
+            get: {
+              tags: ["Groups"],
+              summary: "Get favourite groups",
+              responses: {
+                200: {
+                  description: "Array of favourite group IDs",
+                  content: {
+                    "application/json": {
+                      schema: { type: "array", items: { type: "string" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/groups/group-invitations": {
+            get: {
+              tags: ["Groups"],
+              summary: "List pending group invitations",
+              responses: {
+                200: {
+                  description: "Array of pending invitations",
+                  content: {
+                    "application/json": {
+                      schema: { type: "array", items: { type: "object" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/groupSignupCode/myRequests": {
+            get: {
+              tags: ["Groups"],
+              summary: "List pending join requests submitted by the user",
+              responses: {
+                200: {
+                  description: "Array of join requests",
+                  content: {
+                    "application/json": {
+                      schema: { type: "array", items: { type: "object" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          // ─── Events (Sponds) ──────────────────────────────────────────────────────
+          "/core/v1/sponds/upcoming": {
+            get: {
+              tags: ["Events (Sponds)"],
+              summary: "List upcoming events (lightweight)",
+              description: `Returns a lightweight list of upcoming events. Use the returned IDs to fetch full details with **GET /core/v1/sponds/getBulk** or **GET /core/v1/sponds/{id}**.
+
+- \`includeDeclined\` — include events you declined
+- \`minEndTimestamp\` — only events ending after this datetime`,
+              parameters: [
+                {
+                  name: "includeDeclined",
+                  in: "query",
+                  schema: { type: "boolean" },
+                },
+                {
+                  name: "minEndTimestamp",
+                  in: "query",
+                  schema: { type: "string", format: "date-time" },
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Array of event summaries",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/EventSummary" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/sponds/{id}": {
+            get: {
+              tags: ["Events (Sponds)"],
+              summary: "Get a single event by ID",
+              description:
+                "Returns the full event object. The app sends `x-spond-lastupdatetime` (unix ms) and receives `304 Not Modified` if unchanged.",
+              parameters: [
+                {
+                  name: "id",
+                  in: "path",
+                  required: true,
+                  schema: { type: "string" },
+                  description: "Event ID",
+                },
+                {
+                  name: "addProfileInfo",
+                  in: "query",
+                  schema: { type: "boolean" },
+                },
+                {
+                  name: "includeComments",
+                  in: "query",
+                  schema: { type: "boolean" },
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Full event",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/Event" },
+                    },
+                  },
+                },
+                304: { description: "Not modified" },
+              },
+            },
+          },
+
+          "/core/v1/sponds/getBulk": {
+            get: {
+              tags: ["Events (Sponds)"],
+              summary: "Bulk fetch events by IDs",
+              description:
+                "Fetch up to ~10 full event objects in one request. IDs are comma-separated. The app uses this after `/sponds/upcoming` returns IDs.",
+              parameters: [
+                {
+                  name: "ids",
+                  in: "query",
+                  required: true,
+                  schema: { type: "string" },
+                  description: "Comma-separated event IDs",
+                },
+                {
+                  name: "includeComments",
+                  in: "query",
+                  schema: { type: "boolean" },
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Array of full events",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/Event" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/sponds": {
+            get: {
+              tags: ["Events (Sponds)"],
+              summary: "List events with filters",
+              description: `Filtered event listing. Supports:
+- **response** — filter by RSVP status (multiple: \`?response=accepted&response=unanswered\`)
+- **groupId** — filter to one group
+- **order** — \`asc\` or \`desc\`
+- **max** — result limit
+- **minEndTimestamp** — earliest end time
+- **includeHidden** — include hidden events`,
+              parameters: [
+                {
+                  name: "response",
+                  in: "query",
+                  schema: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      enum: ["accepted", "declined", "unanswered"],
+                    },
+                  },
+                  style: "form",
+                  explode: true,
+                },
+                { name: "groupId", in: "query", schema: { type: "string" } },
+                {
+                  name: "includeComments",
+                  in: "query",
+                  schema: { type: "boolean" },
+                },
+                {
+                  name: "includeHidden",
+                  in: "query",
+                  schema: { type: "boolean" },
+                },
+                {
+                  name: "max",
+                  in: "query",
+                  schema: { type: "integer", default: 20 },
+                },
+                {
+                  name: "minEndTimestamp",
+                  in: "query",
+                  schema: { type: "string", format: "date-time" },
+                },
+                {
+                  name: "order",
+                  in: "query",
+                  schema: { type: "string", enum: ["asc", "desc"] },
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Array of events",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/Event" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/series/{seriesId}": {
+            get: {
+              tags: ["Events (Sponds)"],
+              summary: "Get recurring event series with all instances",
+              description: `Returns the series definition plus all individual event instances (\`sponds\` array).
+
+**Series fields:**
+- \`interval\` — \`WEEKLY\`, \`BIWEEKLY\`, \`MONTHLY\`
+- \`duration\` — event duration in seconds (e.g. 7200 = 2 hours)
+- \`inviteOffset\` — seconds before start to send invites
+- \`rsvpOffset\` — seconds before start to close RSVP
+- \`sponds[]\` — all individual event instances from \`fromOrdinal\`
+
+Use \`fromOrdinal=0\` and \`includeSponds=true\` to get the full series history.`,
+              parameters: [
+                {
+                  name: "seriesId",
+                  in: "path",
+                  required: true,
+                  schema: { type: "string" },
+                  description: "Series ID (found in event.seriesId)",
+                },
+                {
+                  name: "fromOrdinal",
+                  in: "query",
+                  schema: { type: "integer", default: 0 },
+                  description: "Start from this ordinal index",
+                },
+                {
+                  name: "includeSponds",
+                  in: "query",
+                  schema: { type: "boolean", default: true },
+                  description: "Include individual event instances",
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Series with instances",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          id: { type: "string" },
+                          heading: { type: "string" },
+                          description: { type: "string" },
+                          ownerIds: {
+                            type: "array",
+                            items: { type: "string" },
+                          },
+                          groupId: { type: "string" },
+                          interval: {
+                            type: "string",
+                            enum: ["WEEKLY", "BIWEEKLY", "MONTHLY"],
+                          },
+                          duration: { type: "integer", description: "Seconds" },
+                          inviteOffset: {
+                            type: "integer",
+                            description: "Seconds before start",
+                          },
+                          rsvpOffset: {
+                            type: "integer",
+                            description: "Seconds before start",
+                          },
+                          maxAccepted: { type: "integer" },
+                          autoAccept: { type: "boolean" },
+                          visibility: {
+                            type: "string",
+                            enum: ["ALL", "SUBGROUP"],
+                          },
+                          sponds: {
+                            type: "array",
+                            items: { $ref: "#/components/schemas/Event" },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          // ─── Posts & Polls ────────────────────────────────────────────────────────
+          "/core/v1/sponds/{spondId}/responses/{profileId}": {
+            put: {
+              tags: ["Events (Sponds)"],
+              summary: "RSVP to an event — accept or decline (Member)",
+              description: `**The core RSVP endpoint for regular group members.**
+
+- \`"accepted": true\` → accept the event
+- \`"accepted": false\` → decline the event
+- \`{profileId}\` is the responding user's own profile ID (or a \`behalfOfId\` from the event)
+- If the event is full (\`maxAccepted\` reached), accepting places you on the **waitlist**
+
+**Event owners/hosts** must use \`POST /acceptHost\` or \`POST /declineHost\` instead.`,
+              parameters: [
+                {
+                  name: "spondId",
+                  in: "path",
+                  required: true,
+                  schema: { type: "string" },
+                  description: "Event ID",
+                  example: "76F2D118F2DE4FA197CAC0D17E7B1108",
+                },
+                {
+                  name: "profileId",
+                  in: "path",
+                  required: true,
+                  schema: { type: "string" },
+                  description:
+                    "Profile ID of the person responding (your own ID)",
+                  example: "74018A7708144C2E8E907D9094027CBC",
+                },
+              ],
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      required: ["accepted"],
+                      properties: {
+                        accepted: {
+                          type: "boolean",
+                          description: "true = accept, false = decline",
+                        },
+                      },
+                    },
+                    example: { accepted: true },
+                  },
+                },
+              },
+              responses: {
+                200: {
+                  description:
+                    "RSVP recorded — returns the updated full event object",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/Event" },
+                    },
+                  },
+                },
+                400: {
+                  description:
+                    "Bad request (event expired, RSVP deadline passed)",
+                },
+                401: { description: "Unauthorized" },
+                404: { description: "Event or profile not found" },
+              },
+            },
+          },
+
+          "/core/v1/sponds/{spondId}/acceptHost": {
+            post: {
+              tags: ["Events (Sponds)"],
+              summary: "Accept an event as Host/Owner",
+              description: `Used by **event owners** (members listed in \`event.owners[]\`) to mark themselves as attending their own event.
+
+Regular members must use **PUT /core/v1/sponds/{spondId}/responses/{profileId}** instead.
+
+Empty POST body — no request body required.`,
+              parameters: [
+                {
+                  name: "spondId",
+                  in: "path",
+                  required: true,
+                  schema: { type: "string" },
+                  description: "Event ID",
+                  example: "E8C16A77A127405B9FC1DFD676836D0B",
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Host accepted — returns updated event",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/Event" },
+                    },
+                  },
+                },
+                401: { description: "Unauthorized" },
+                403: { description: "Not an owner of this event" },
+              },
+            },
+          },
+
+          "/core/v1/sponds/{spondId}/declineHost": {
+            post: {
+              tags: ["Events (Sponds)"],
+              summary: "Decline an event as Host/Owner",
+              description: `Used by **event owners** (members listed in \`event.owners[]\`) to mark themselves as not attending their own event.
+
+Regular members must use **PUT /core/v1/sponds/{spondId}/responses/{profileId}** instead.
+
+Empty POST body — no request body required.`,
+              parameters: [
+                {
+                  name: "spondId",
+                  in: "path",
+                  required: true,
+                  schema: { type: "string" },
+                  description: "Event ID",
+                  example: "E8C16A77A127405B9FC1DFD676836D0B",
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Host declined — returns updated event",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/Event" },
+                    },
+                  },
+                },
+                401: { description: "Unauthorized" },
+                403: { description: "Not an owner of this event" },
+              },
+            },
+          },
+
+          "/core/v1/posts": {
+            get: {
+              tags: ["Posts & Polls"],
+              summary: "List group posts",
+              description: `Returns posts with filtering. **type** values: \`PLAIN\`, \`POLL\`, \`PAYMENT\`.
+
+Use \`maxTimestamp\` for pagination (posts older than this timestamp).`,
+              parameters: [
+                {
+                  name: "type",
+                  in: "query",
+                  required: true,
+                  schema: {
+                    type: "string",
+                    enum: ["PLAIN", "POLL", "PAYMENT"],
+                  },
+                },
+                { name: "groupId", in: "query", schema: { type: "string" } },
+                {
+                  name: "includeComments",
+                  in: "query",
+                  schema: { type: "boolean" },
+                },
+                {
+                  name: "max",
+                  in: "query",
+                  schema: { type: "integer", default: 10 },
+                },
+                {
+                  name: "maxTimestamp",
+                  in: "query",
+                  schema: { type: "string", format: "date-time" },
+                  description: "Pagination: posts older than this",
+                },
+                {
+                  name: "order",
+                  in: "query",
+                  schema: { type: "string", enum: ["asc", "desc"] },
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Array of posts",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/Post" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/posts/unanswered": {
+            get: {
+              tags: ["Posts & Polls"],
+              summary: "List unanswered payment posts",
+              description:
+                "Returns payment posts the user has not yet responded to (pending payments). Typically called with `type=PAYMENT`.",
+              parameters: [
+                {
+                  name: "type",
+                  in: "query",
+                  required: true,
+                  schema: { type: "string", enum: ["PAYMENT"] },
+                },
+                {
+                  name: "includeComments",
+                  in: "query",
+                  schema: { type: "boolean", default: false },
+                },
+                {
+                  name: "max",
+                  in: "query",
+                  schema: { type: "integer", default: 300 },
+                },
+                {
+                  name: "order",
+                  in: "query",
+                  schema: {
+                    type: "string",
+                    enum: ["asc", "desc"],
+                    default: "desc",
+                  },
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Array of unanswered payment posts",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/Post" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/posts/badge": {
+            get: {
+              tags: ["Posts & Polls"],
+              summary: "Get unread posts badge count",
+              responses: {
+                200: {
+                  description: "Badge count or empty object",
+                  content: {
+                    "application/json": { schema: { type: "object" } },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/seen/posts/self": {
+            get: {
+              tags: ["Posts & Polls"],
+              summary: "Check which posts the user has seen",
+              parameters: [
+                {
+                  name: "ids",
+                  in: "query",
+                  required: true,
+                  schema: { type: "string" },
+                  description: "Comma-separated post IDs",
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Array of seen post IDs",
+                  content: {
+                    "application/json": {
+                      schema: { type: "array", items: { type: "string" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          // ─── Chat ─────────────────────────────────────────────────────────────────
+          "/core/v1/chat": {
+            post: {
+              tags: ["Chat"],
+              summary: "Initialise chat session — get Chat API credentials",
+              description: `**Must be called before any /chat/v1/* requests.**
+
+Returns the Chat API base URL and an \`auth\` token. Pass this token as the **\`auth\` header** on all chat requests (not as a Bearer token).
+
+Empty request body (Content-Length: 0).`,
+              requestBody: {
+                required: false,
+                content: { "application/json": { schema: { type: "object" } } },
+              },
+              responses: {
+                200: {
+                  description: "Chat credentials",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ChatInitResponse" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/chat/v1/chats": {
+            get: {
+              tags: ["Chat"],
+              summary: "List chat conversations",
+              description:
+                "Returns conversations (group chats and DMs). Use `auth` header, not Bearer. Paginate with `maxTimestamp`.",
+              security: [{ chatAuth: [] }],
+              parameters: [
+                {
+                  name: "max",
+                  in: "query",
+                  schema: { type: "integer", default: 20 },
+                },
+                {
+                  name: "maxTimestamp",
+                  in: "query",
+                  schema: { type: "string", format: "date-time" },
+                  description:
+                    "Pagination cursor — conversations older than this",
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Array of conversations",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "array",
+                        items: {
+                          $ref: "#/components/schemas/ChatConversation",
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/chat/v1/chats/badge": {
+            get: {
+              tags: ["Chat"],
+              summary: "Get unread chat badge count",
+              security: [{ chatAuth: [] }],
+              responses: {
+                200: {
+                  description: "Unread count",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: { value: { type: "integer" } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          // ─── Payments ─────────────────────────────────────────────────────────────
+          "/core/v1/currencies/{code}": {
+            get: {
+              tags: ["Payments"],
+              summary: "Get currency info",
+              parameters: [
+                {
+                  name: "code",
+                  in: "path",
+                  required: true,
+                  schema: { type: "string" },
+                  example: "EUR",
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Currency metadata",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/CurrencyInfo" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/payoutAccounts": {
+            get: {
+              tags: ["Payments"],
+              summary: "List payout (bank) accounts",
+              responses: {
+                200: {
+                  description: "Payout accounts",
+                  content: {
+                    "application/json": {
+                      schema: { type: "array", items: { type: "object" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/payoutAccounts/countries": {
+            get: {
+              tags: ["Payments"],
+              summary: "Get supported payout countries",
+              description: `Returns countries supporting Spond payouts with required fields, banking formats, and currencies.
+
+Supported: AU, BE, CA, DK, DE, ES, FI, FR, GB, IE, IT, LU, NL, NO, AT, CH, SE, US`,
+              responses: {
+                200: {
+                  description: "Country payout configs",
+                  content: {
+                    "application/json": {
+                      schema: { type: "array", items: { type: "object" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/paymentAccounts": {
+            get: {
+              tags: ["Payments"],
+              summary: "List payment methods",
+              responses: {
+                200: {
+                  description: "Payment accounts",
+                  content: {
+                    "application/json": {
+                      schema: { type: "array", items: { type: "object" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          // ─── Feature Flags ────────────────────────────────────────────────────────
+          "/proxy": {
+            get: {
+              tags: ["Feature Flags"],
+              summary: "Get Unleash feature toggles",
+              description: `**Base URL: \`https://features.spond.com\`** (different host from the main API)
+
+Returns Unleash feature flags for the current session. The app polls this to enable/disable features without app updates.
+
+**Auth:** Static API key in \`Authorization\` header (not a Bearer JWT).
+
+**23 toggles observed in traffic:**
+
+| Toggle Name | Value | Purpose |
+|---|---|---|
+| \`MandatoryEmail\` | enabled | Force users to add email |
+| \`AdminFrcPermission\` | enabled | Admin FRC permissions |
+| \`new-s3-aws-filestorage\` | enabled | New AWS S3 file storage |
+| \`subsciptionPayments\` | enabled | Subscription payments |
+| \`useSubscriptionStatisticsEndpoints\` | enabled | Subscription stats API |
+| \`checkIfSubscriptionIsValidBeforeCharging\` | enabled | Validate sub before charging |
+| \`AdFrequencyCappingMessagesAndNotifications\` | 20_per_24_hours | Ad cap for messages/notifications |
+| \`AdFrequencyCappingVideoBumper\` | 4_per_24_hours | Video ad cap |
+| \`AdFrequencyCappingComments\` | 20_per_24_hours | Comment ad cap |
+| \`RatingPromptShareMatchResult\` | on | Rating prompt after match share |
+| \`RatingPromptCreated3PostsOrPolls\` | on | Rating prompt on 3 posts |
+| \`RatingPromptAcceptedTask\` | on | Rating prompt on task accept |
+| \`RatingPromptSavedLineUp\` | on | Rating prompt on lineup save |
+| \`GroupActivation\` | on | Group activation flow |
+| \`ATTPrompt\` | shown_prompt_without_pre_prompt | iOS ATT prompt variant |
+| \`ReferralProgram\` | ActiveStatus (c2c, i2c, champs) | Referral system variants |
+| \`BrandPartnershipGAM\` | disabled | Google Ad Manager |
+| \`SendWelcomeEmails\` | disabled | Welcome emails |
+| \`GroupServiceUseUserNotifier\` | disabled | Group service notifications |
+| \`payment-processor.shadow-mode\` | disabled | Payment processor shadow mode |
+| \`additionalWaivers\` | disabled | Additional waiver forms |
+| \`nifReportIncludeDeletedMemberData\` | disabled | NIF report: include deleted members |
+| \`useUserNotifierForSpondResponseNotifications\` | disabled | RSVP notification system |`,
+              security: [],
+              servers: [
+                {
+                  url: "https://features.spond.com",
+                  description: "Spond Unleash Feature Flag Server",
+                },
+              ],
+              parameters: [
+                {
+                  name: "appName",
+                  in: "query",
+                  schema: { type: "string", default: "Spond" },
+                },
+                {
+                  name: "environment",
+                  in: "query",
+                  schema: { type: "string", default: "default" },
+                },
+                {
+                  name: "userId",
+                  in: "query",
+                  schema: { type: "string" },
+                  description: "User profile ID",
+                },
+                {
+                  name: "sessionId",
+                  in: "query",
+                  schema: { type: "string" },
+                  description: "UUID session",
+                },
+                {
+                  name: "properties[client]",
+                  in: "query",
+                  schema: { type: "string", example: "ios" },
+                },
+                {
+                  name: "properties[appVersion]",
+                  in: "query",
+                  schema: { type: "string", example: "4.52.1" },
+                },
+                {
+                  name: "properties[countryCode]",
+                  in: "query",
+                  schema: { type: "string", example: "DEU" },
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Feature toggles",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          toggles: {
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: {
+                                name: { type: "string" },
+                                enabled: { type: "boolean" },
+                                variant: {
+                                  type: "object",
+                                  properties: {
+                                    name: { type: "string" },
+                                    enabled: { type: "boolean" },
+                                    feature_enabled: { type: "boolean" },
+                                    payload: {
+                                      type: "object",
+                                      description:
+                                        "Optional JSON payload for variant",
+                                    },
+                                  },
+                                },
+                                impressionData: { type: "boolean" },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/proxy/client/metrics": {
+            post: {
+              tags: ["Feature Flags"],
+              summary: "Report feature flag usage metrics",
+              description: `**Base URL: \`https://features.spond.com\`**
+
+Reports toggle evaluation counts (yes/no) back to Unleash. The app sends these periodically.
+
+**Auth:** Same static API key in \`Authorization\` header.`,
+              security: [],
+              servers: [
+                {
+                  url: "https://features.spond.com",
+                  description: "Spond Unleash Feature Flag Server",
+                },
+              ],
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        appName: { type: "string", example: "Spond" },
+                        instanceId: { type: "string", example: "swift" },
+                        bucket: {
+                          type: "object",
+                          properties: {
+                            start: { type: "string", format: "date-time" },
+                            stop: { type: "string", format: "date-time" },
+                            toggles: {
+                              type: "object",
+                              additionalProperties: {
+                                type: "object",
+                                properties: {
+                                  yes: { type: "integer" },
+                                  no: { type: "integer" },
+                                  variants: { type: "object" },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              responses: {
+                200: { description: "OK" },
+              },
+            },
+          },
+
+          // ─── Misc ─────────────────────────────────────────────────────────────────
+          "/core/v1/device": {
+            post: {
+              tags: ["Misc"],
+              summary: "Register device for push notifications",
+              description: `Registers or updates the push token for this device.
+
+- **type**: \`apns\` for iOS, \`fcm\` for Android
+- **production**: \`true\` for App Store builds, \`false\` for development`,
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: { $ref: "#/components/schemas/DeviceRegistration" },
+                  },
+                },
+              },
+              responses: {
+                200: {
+                  description: "Registered device",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          profileId: { type: "string" },
+                          pushToken: { type: "string" },
+                          name: { type: "string" },
+                          type: { type: "string", enum: ["apns", "fcm"] },
+                          production: { type: "boolean" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/clock": {
+            get: {
+              tags: ["Misc"],
+              summary: "Get server time",
+              description:
+                "Returns the current server time. Useful for calculating token expiration relative to server clock.",
+              responses: {
+                200: {
+                  description: "Server time",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          time: { type: "string", format: "date-time" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/config": {
+            get: {
+              tags: ["Misc"],
+              summary: "Get app configuration",
+              responses: {
+                200: {
+                  description: "App config",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/AppConfig" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/activities": {
+            get: {
+              tags: ["Misc"],
+              summary: "List recent activity notifications",
+              description:
+                "Returns a feed of activity notifications. Poll with `since` to get only new items.",
+              parameters: [
+                {
+                  name: "since",
+                  in: "query",
+                  schema: { type: "string", format: "date-time" },
+                  description: "Only activities after this timestamp",
+                },
+                {
+                  name: "order",
+                  in: "query",
+                  schema: {
+                    type: "string",
+                    enum: ["asc", "desc"],
+                    default: "asc",
+                  },
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Array of activities (empty if none)",
+                  content: {
+                    "application/json": {
+                      schema: { type: "array", items: { type: "object" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/activities/summary": {
+            get: {
+              tags: ["Misc"],
+              summary: "Get activity summary",
+              parameters: [
+                {
+                  name: "lang",
+                  in: "query",
+                  schema: { type: "string" },
+                  example: "de",
+                },
+              ],
+              responses: {
+                200: {
+                  description: "Activity summary",
+                  content: {
+                    "application/json": {
+                      schema: { type: "array", items: { type: "object" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/promos": {
+            get: {
+              tags: ["Misc"],
+              summary: "Get promotional content",
+              description:
+                "Returns promotional banners or offers. Returns empty array `[]` if none active.",
+              responses: {
+                200: {
+                  description: "Array of promos",
+                  content: {
+                    "application/json": {
+                      schema: { type: "array", items: { type: "object" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/v1/lineups/formations": {
+            get: {
+              tags: ["Misc"],
+              summary: "Get football lineup formations",
+              description:
+                "Returns tactical formations with player positions (x/y coordinates, 0–1 normalised) for rendering on a pitch.",
+              responses: {
+                200: {
+                  description: "Array of formations",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            id: { type: "string" },
+                            name: { type: "string", example: "4-3-3" },
+                            teamSize: { type: "integer" },
+                            positions: {
+                              type: "array",
+                              items: {
+                                type: "object",
+                                properties: {
+                                  name: {
+                                    type: "string",
+                                    example: "lineup_football_goalkeeper",
+                                  },
+                                  x: { type: "number", format: "float" },
+                                  y: { type: "number", format: "float" },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/core/coaches-corner/v1/corners": {
+            get: {
+              tags: ["Misc"],
+              summary: "Get Coaches Corner content",
+              responses: {
+                200: {
+                  description: "Corners data",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        properties: {
+                          corners: { type: "array", items: { type: "object" } },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+
+          "/storage/upload/restrictions": {
+            get: {
+              tags: ["Misc"],
+              summary: "Get file upload restrictions",
+              description:
+                "Returns max file upload size. **No auth required** for this endpoint.",
+              security: [],
+              responses: {
+                200: {
+                  description: "Upload restrictions",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/StorageRestrictions",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+
+      window.onload = () => {
+        SwaggerUIBundle({
+          spec,
+          dom_id: "#swagger-ui",
+          presets: [
+            SwaggerUIBundle.presets.apis,
+            SwaggerUIBundle.SwaggerUIStandalonePreset,
+          ],
+          layout: "BaseLayout",
+          deepLinking: true,
+          defaultModelsExpandDepth: 1,
+          defaultModelExpandDepth: 2,
+          docExpansion: "list",
+          filter: true,
+          tryItOutEnabled: false,
+          supportedSubmitMethods: [], // Disable Execute — API has no CORS headers (mobile-only API)
+          syntaxHighlight: { activate: true, theme: "monokai" },
+        });
+      };
+    </script>
+  </body>
+</html>
