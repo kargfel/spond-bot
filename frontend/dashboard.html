@@ -336,11 +336,11 @@
         const isProcessed = ev.status === "processed";
         // invite_time = when Spond locks the RSVP window (the real "respond by" deadline).
         // rsvp_date   = event registration close date — a different concept, shown as fallback.
-        const deadlineTs = ev.invite_time;
+        const deadlineTs = ev.invite_time || ev.rsvp_date;
         let deadlineMeta = "";
         if (isProcessed && deadlineTs) {
           // For completed events: neutral confirmation stamp, no red, no "RSVP by"
-          deadlineMeta = `<span class="event-meta-item" style="color:var(--mint)">${ICON.clock} RSVPed on ${fmtDate(deadlineTs)}</span>`;
+          deadlineMeta = `<span class="event-meta-item" style="color:var(--mint)">${ICON.clock} RSVPed before ${fmtDate(deadlineTs)}</span>`;
         } else if (deadlineTs) {
           deadlineMeta = `<span class="event-meta-item" style="${isOverdue(deadlineTs) ? "color:var(--status-red)" : ""}"><span title="${ev.invite_time ? "RSVP deadline (inviteTime)" : "Registration deadline (rsvpDate)"}">${ICON.clock} RSVP by ${fmtDate(deadlineTs)}</span></span>`;
         }
