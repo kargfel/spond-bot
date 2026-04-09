@@ -289,9 +289,15 @@
           // When viewing "All", sort active events (pending/failed) before
           // processed ones so the actionable items always appear at the top.
           if (!statusFilter) {
-            const rank = { pending: 0, processing: 1, failed: 2, processed: 3, manual: 4 };
-            events = events.sort((a, b) =>
-              (rank[a.status] ?? 9) - (rank[b.status] ?? 9)
+            const rank = {
+              pending: 0,
+              processing: 1,
+              failed: 2,
+              processed: 3,
+              manual: 4,
+            };
+            events = events.sort(
+              (a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9),
             );
           }
 
@@ -330,7 +336,7 @@
         const isProcessed = ev.status === "processed";
         // invite_time = when Spond locks the RSVP window (the real "respond by" deadline).
         // rsvp_date   = event registration close date — a different concept, shown as fallback.
-        const deadlineTs = ev.invite_time || ev.rsvp_date;
+        const deadlineTs = ev.invite_time;
         let deadlineMeta = "";
         if (isProcessed && deadlineTs) {
           // For completed events: neutral confirmation stamp, no red, no "RSVP by"
