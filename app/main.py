@@ -49,7 +49,7 @@ async def _seed_admin() -> None:
 
     async for db in get_db():
         result = await db.execute(
-            select(FrontendUser).where(FrontendUser.is_admin == True)  # noqa: E712
+            select(FrontendUser).where(FrontendUser.is_admin == True).limit(1)  # noqa: E712
         )
         if result.scalar_one_or_none():
             logger.info("Admin account already exists — skipping seed.")
