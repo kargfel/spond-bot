@@ -1,20 +1,24 @@
 """
 /api/v1/events — Event listing and RSVP decision endpoints.
 
+All endpoints require a valid JWT (CurrentUser).
+Admins can see and modify all events.
+Regular users can only see/modify events belonging to their linked Spond user.
+
 GET    /events                 List events (filterable)
 GET    /events/{id}            Get a single event
 PATCH  /events/{id}/decision   Set user_choice (accept/decline/manual)
-POST   /sync                   Manually trigger discovery sync
-GET    /health                 Health check
+POST   /sync                   Manually trigger discovery sync (admin only)
+GET    /health                 Health check (public)
 """
 import logging
 import uuid
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import AuthDep, DbDep
+from app.api.deps import AdminDep, CurrentUser, DbDep
 from app.models.event import CHOICE_MANUAL, STATUS_PENDING, Event
 from app.schemas.event import EventDecisionUpdate, EventResponse
 
@@ -22,25 +26,47 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Events"])
 
 
+def _assert_event_access(event: Event, current_user: dict) -> None:
+    """Raise 403 if a non-admin user tries to touch another user's event."""
+    if current_user.get("is_admin"):
+        return
+    linked = current_user.get("linked_user_id")
+    if not linked or str(event.user_id) != linked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this event.",
+        )
+
+
 @router.get(
     "/events",
     response_model=list[EventResponse],
-    dependencies=[AuthDep],
     summary="List events",
 )
 async def list_events(
     db: AsyncSession = DbDep,
-    user_id: uuid.UUID | None = Query(None, description="Filter by user UUID"),
-    status_filter: str | None = Query(None, alias="status", description="e.g. pending, processed, failed"),
-    choice: str | None = Query(None, description="e.g. accept, decline, manual"),
+    current_user: dict = CurrentUser,
+    user_id: uuid.UUID | None = Query(None, description="Filter by user UUID (admin only)"),
+    status_filter: str | None = Query(None, alias="status"),
+    choice: str | None = Query(None),
 ):
     """
-    Returns all known events, optionally filtered by user, status, or user_choice.
-    Results are ordered by invite_time ascending (soonest first).
+    Returns events visible to the caller.
+
+    Admins can optionally pass `user_id` to filter by a specific Spond user.
+    Non-admin users always get only their own events regardless of `user_id`.
     """
     q = select(Event)
-    if user_id:
-        q = q.where(Event.user_id == user_id)
+
+    if current_user.get("is_admin"):
+        if user_id:
+            q = q.where(Event.user_id == user_id)
+    else:
+        linked = current_user.get("linked_user_id")
+        if not linked:
+            return []  # No linked Spond user → no events
+        q = q.where(Event.user_id == uuid.UUID(linked))
+
     if status_filter:
         q = q.where(Event.status == status_filter)
     if choice:
@@ -54,26 +80,30 @@ async def list_events(
 @router.get(
     "/events/{event_id}",
     response_model=EventResponse,
-    dependencies=[AuthDep],
     summary="Get a single event",
 )
-async def get_event(event_id: uuid.UUID, db: AsyncSession = DbDep):
+async def get_event(
+    event_id: uuid.UUID,
+    db: AsyncSession = DbDep,
+    current_user: dict = CurrentUser,
+):
     event = await db.get(Event, event_id)
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+    _assert_event_access(event, current_user)
     return event
 
 
 @router.patch(
     "/events/{event_id}/decision",
     response_model=EventResponse,
-    dependencies=[AuthDep],
     summary="Set RSVP decision for an event",
 )
 async def set_decision(
     event_id: uuid.UUID,
     payload: EventDecisionUpdate,
     db: AsyncSession = DbDep,
+    current_user: dict = CurrentUser,
 ):
     """
     Set whether the user wants to accept, decline, or leave this event as manual.
@@ -85,10 +115,10 @@ async def set_decision(
     event = await db.get(Event, event_id)
     if not event:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+    _assert_event_access(event, current_user)
 
     event.user_choice = payload.user_choice
 
-    # Reset a failed event so the executioner will try again
     if event.status == "failed" and payload.user_choice != CHOICE_MANUAL:
         event.status = STATUS_PENDING
         event.error_message = None
@@ -96,10 +126,11 @@ async def set_decision(
     await db.commit()
     await db.refresh(event)
     logger.info(
-        "Decision set to %r for event %s (%r)",
+        "Decision set to %r for event %s (%r) by %r",
         payload.user_choice,
         event_id,
         event.heading,
+        current_user.get("username"),
     )
     return event
 
@@ -107,28 +138,18 @@ async def set_decision(
 @router.post(
     "/sync",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[AuthDep],
-    summary="Manually trigger a discovery sync",
+    dependencies=[AdminDep],
+    summary="Manually trigger a discovery sync (admin only)",
 )
 async def trigger_sync():
-    """
-    Enqueues an immediate run of the discovery worker.
-
-    The worker runs asynchronously; this endpoint returns immediately.
-    Check /events after a few seconds to see newly discovered events.
-    """
+    """Enqueues an immediate run of the discovery worker (admin only)."""
     from app.workers.discovery import run_discovery
-
     import asyncio
     asyncio.create_task(run_discovery())
     return {"detail": "Discovery sync triggered."}
 
 
-@router.get(
-    "/health",
-    summary="Health check",
-    include_in_schema=False,
-)
+@router.get("/health", summary="Health check", include_in_schema=False)
 async def health(db: AsyncSession = DbDep):
     """Returns 200 if the app and database are reachable."""
     try:
@@ -138,5 +159,4 @@ async def health(db: AsyncSession = DbDep):
     except Exception as exc:
         logger.error("DB health check failed: %s", exc)
         db_status = "error"
-
     return {"status": "ok", "db": db_status}
