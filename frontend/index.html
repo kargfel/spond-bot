@@ -45,7 +45,7 @@
 
   <!-- Admin link -->
   <div class="auth-footer">
-    <a href="admin.html">Admin access</a>
+    <a href="/admin">Admin access</a>
   </div>
 </div>
 
@@ -57,7 +57,7 @@
   (async function checkExistingSession() {
     const user = await fetchCurrentUser();
     if (user) {
-      window.location.href = user.is_admin ? 'admin.html' : 'dashboard.html';
+      window.location.href = user.is_admin ? '/admin' : '/dashboard';
     }
   })();
 
@@ -91,7 +91,7 @@
 
       // Fetch user claims from the server to decide where to redirect
       const user = await fetchCurrentUser();
-      window.location.href = (user && user.is_admin) ? 'admin.html' : 'dashboard.html';
+      window.location.href = (user && user.is_admin) ? '/admin' : '/dashboard';
     } catch (err) {
       errEl.textContent = err.message;
       errEl.style.display = 'block';

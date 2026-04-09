@@ -21,7 +21,6 @@ class Settings(BaseSettings):
     api_key: str
 
     # The public domain the app is served on — used for secure cookie settings.
-    # e.g. "spond.felixkarg.de"
     site_domain: str = "localhost"
 
     # Scheduler

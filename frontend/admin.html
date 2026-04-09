@@ -35,7 +35,7 @@
       <button class="sidebar-item" data-view="sync" onclick="doSync()">
         ${ICON.sync} Trigger Sync
       </button>
-      <a class="sidebar-item" href="dashboard.html">
+      <a class="sidebar-item" href="/dashboard">
         ${ICON.overview} My Dashboard
       </a>
     </nav>
@@ -265,7 +265,7 @@
   document.querySelector('.sidebar-footer .btn-ghost').innerHTML = ICON.logout + ' Sign Out';
   document.getElementById('edit-event-modal').querySelector('.btn-outline')?.remove();
   // Render sidebar + button icons
-  document.querySelector('a[href="dashboard.html"]').innerHTML = ICON.overview + ' My Dashboard';
+  document.querySelector('a[href="/dashboard"]').innerHTML = ICON.overview + ' My Dashboard';
   setTimeout(() => {
     const sb = document.querySelector('.filter-bar .btn-outline');
     if (sb) sb.innerHTML = ICON.sync + ' Trigger Sync';

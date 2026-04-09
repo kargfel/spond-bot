@@ -31,13 +31,13 @@ function api(path, method = 'GET', body = null) {
 
 /* ── Auth guards ───────────────────────────────────────────────────── */
 async function redirectToLogin() {
-  window.location.href = 'index.html';
+  window.location.href = '/';
 }
 
 async function signOut() {
   // Ask the server to clear the HttpOnly cookie, then redirect
   await api('/auth/logout', 'POST').catch(() => {});
-  window.location.href = 'index.html';
+  window.location.href = '/';
 }
 
 /**
@@ -67,7 +67,7 @@ async function requireAuth() {
 /** Redirect to login if not admin. Returns user claims. */
 async function requireAdmin() {
   const user = await requireAuth();
-  if (!user.is_admin) window.location.href = 'dashboard.html';
+  if (!user.is_admin) window.location.href = '/dashboard';
   return user;
 }
 
