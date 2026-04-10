@@ -49,16 +49,20 @@ async def list_events(
     user_id: uuid.UUID | None = Query(None, description="Filter by user UUID (admin only)"),
     status_filter: str | None = Query(None, alias="status"),
     choice: str | None = Query(None),
+    all: bool = Query(False, description="Fetch all users' events (admin only)"),
 ):
     """
     Returns events visible to the caller.
 
-    Admins can optionally pass `user_id` to filter by a specific Spond user.
+    Admins can optionally pass `user_id` to filter by a specific Spond user,
+    or pass `all=true` to fetch all users' events. For safety in dashboard views, 
+    if an admin doesn't explicitly pass `all=true` or `user_id`, they only see their own events.
     Non-admin users always get only their own events regardless of `user_id`.
     """
     q = select(Event)
 
-    if current_user.get("is_admin"):
+    # Restrict to caller's own events unless caller is admin AND explicitly asks for 'all' or a specific 'user_id'
+    if current_user.get("is_admin") and (all or user_id):
         if user_id:
             q = q.where(Event.user_id == user_id)
     else:

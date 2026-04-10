@@ -555,7 +555,7 @@
         const status = document.getElementById("f-status")?.value;
         const choice = document.getElementById("f-choice")?.value;
 
-        let url = "/events?";
+        let url = "/events?all=true&";
         if (user_id) url += `user_id=${user_id}&`;
         if (status) url += `status=${status}&`;
         if (choice) url += `choice=${choice}&`;
