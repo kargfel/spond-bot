@@ -504,9 +504,9 @@
           const [usersRes, eventsRes, pendingRes, failedRes] =
             await Promise.all([
               api("/users"),
-              api("/events"),
-              api("/events?status=pending"),
-              api("/events?status=failed"),
+              api("/events?all=true"),
+              api("/events?all=true&status=pending"),
+              api("/events?all=true&status=failed"),
             ]);
           const [users, events, pending, failed] = await Promise.all([
             usersRes.json(),
