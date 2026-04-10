@@ -563,7 +563,18 @@
         try {
           const res = await api(url);
           if (!res.ok) throw new Error("Failed");
-          allEvents = await res.json();
+          let data = await res.json();
+
+          allEvents = data.sort((a, b) => {
+            const timeA = a.start_timestamp
+              ? new Date(a.start_timestamp).getTime()
+              : Infinity;
+            const timeB = b.start_timestamp
+              ? new Date(b.start_timestamp).getTime()
+              : Infinity;
+            return timeA - timeB;
+          });
+
           filterLocally();
         } catch (err) {
           wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">Failed to load events</div></div>`;
