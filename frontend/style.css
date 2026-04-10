@@ -450,6 +450,15 @@ select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csv
 .auth-footer a { font-size: 0.78rem; color: var(--text-dim); transition: color var(--transition); }
 .auth-footer a:hover { color: var(--mint); }
 
+.page-footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
 /* ── Utilities ─────────────────────────────────────────────────────── */
 .hidden { display: none !important; }
 .flex { display: flex; }
