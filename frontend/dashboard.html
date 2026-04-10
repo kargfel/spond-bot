@@ -286,20 +286,12 @@
           if (!res.ok) throw new Error("Failed to load events");
           let events = await res.json();
 
-          // When viewing "All", sort active events (pending/failed) before
-          // processed ones so the actionable items always appear at the top.
-          if (!statusFilter) {
-            const rank = {
-              pending: 0,
-              processing: 1,
-              failed: 2,
-              processed: 3,
-              manual: 4,
-            };
-            events = events.sort(
-              (a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9),
-            );
-          }
+          // Sort by the Date the Event happens (start_timestamp), not by status
+          events = events.sort((a, b) => {
+            const timeA = a.start_timestamp ? new Date(a.start_timestamp).getTime() : Infinity;
+            const timeB = b.start_timestamp ? new Date(b.start_timestamp).getTime() : Infinity;
+            return timeA - timeB;
+          });
 
           renderEvents(events);
         } catch (err) {
