@@ -2,10 +2,10 @@
 
 <div align="center">
 
-[![License](https://img.shields.io/github/license/kargfel/spond-bot?style=for-the-badge&color=8A2BE2)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/kargfel/spond-bot?style=for-the-badge&color=9370DB)](https://github.com/kargfel/spond-bot/stargazers)
-[![Forks](https://img.shields.io/github/forks/kargfel/spond-bot?style=for-the-badge&color=BA55D3)](https://github.com/kargfel/spond-bot/network/members)
-[![Issues](https://img.shields.io/github/issues/kargfel/spond-bot?style=for-the-badge&color=EE82EE)](https://github.com/kargfel/spond-bot/issues)
+[![License](https://img.shields.io/github/license/kargfel/spond-bot?style=for-the-badge&color=8A2BE2&imFelixwuhu)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/kargfel/spond-bot?style=for-the-badge&color=9370DB&imFelixwuhu)](https://github.com/kargfel/spond-bot/stargazers)
+[![Forks](https://img.shields.io/github/forks/kargfel/spond-bot?style=for-the-badge&color=BA55D3&imFelixwuhu)](https://github.com/kargfel/spond-bot/network/members)
+[![Issues](https://img.shields.io/github/issues/kargfel/spond-bot?style=for-the-badge&color=EE82EE&imFelixwuhu)](https://github.com/kargfel/spond-bot/issues)
 [![Docker](https://img.shields.io/badge/Docker-Enabled-2496ED?style=for-the-badge&logo=docker&logoColor=white)](#)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white)](#)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](#)
