@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SpondBot — Sign In</title>
+    <meta
+      name="description"
+      content="Sign in to SpondBot, your automated Spond RSVP dashboard."
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="auth-page">
+      <!-- Background orbs -->
+      <div class="auth-bg-orb"></div>
+      <div class="auth-bg-orb"></div>
+
+      <!-- Logo -->
+      <div class="auth-logo-area">
+        <div class="auth-logo-text">Spond<span>Bot</span></div>
+        <div class="auth-tagline">Never miss a spot again.</div>
+      </div>
+
+      <!-- Card -->
+      <div class="auth-card">
+        <form class="auth-form" id="signin-form" onsubmit="handleSignIn(event)">
+          <div id="signin-error" class="auth-error"></div>
+          <div class="field">
+            <label for="signin-username">Username</label>
+            <input
+              id="signin-username"
+              class="input"
+              type="text"
+              placeholder="Your username"
+              autocomplete="username"
+              required
+            />
+          </div>
+          <div class="field">
+            <label for="signin-password">Password</label>
+            <div class="input-wrap">
+              <input
+                id="signin-password"
+                class="input"
+                type="password"
+                placeholder="••••••••"
+                autocomplete="current-password"
+                required
+              />
+              <button
+                type="button"
+                class="input-icon"
+                onclick="togglePassword('signin-password', this)"
+                tabindex="-1"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <button
+            type="submit"
+            class="btn btn-primary btn-full"
+            id="signin-btn"
+          >
+            Sign In
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script src="app.js"></script>
+    <script>
+      // If already logged in (cookie present), redirect to appropriate page
+      (async function checkExistingSession() {
+        const user = await fetchCurrentUser();
+        if (user) {
+          window.location.href = user.is_admin ? "/admin" : "/dashboard";
+        }
+      })();
+
+      function togglePassword(inputId, btn) {
+        const input = document.getElementById(inputId);
+        const isText = input.type === "text";
+        input.type = isText ? "password" : "text";
+        btn.style.color = isText ? "" : "var(--mint)";
+      }
+
+      async function handleSignIn(e) {
+        e.preventDefault();
+        const btn = document.getElementById("signin-btn");
+        const errEl = document.getElementById("signin-error");
+        const username = document
+          .getElementById("signin-username")
+          .value.trim();
+        const password = document.getElementById("signin-password").value;
+
+        errEl.style.display = "none";
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Signing in…';
+
+        try {
+          // Login returns 204 and sets the HttpOnly cookie on success
+          const res = await api("/auth/login", "POST", { username, password });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            // Handle rate limit response
+            if (res.status === 429)
+              throw new Error("Too many login attempts. Please wait a minute.");
+            throw new Error(err.detail || "Invalid username or password.");
+          }
+
+          // Fetch user claims from the server to decide where to redirect
+          const user = await fetchCurrentUser();
+          window.location.href =
+            user && user.is_admin ? "/admin" : "/dashboard";
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.style.display = "block";
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Sign In";
+        }
+      }
+    </script>
+  </body>
+</html>

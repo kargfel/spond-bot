@@ -12,3 +12,8 @@ Spond/
 spondRE
 upcoming
 login
+.vscode/
+
+# Debug & temp files generated during development
+_debug/
+

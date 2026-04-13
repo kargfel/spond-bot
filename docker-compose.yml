@@ -1,9 +1,33 @@
 services:
-  spond-bot:
+  db:
+    image: postgres:16-alpine
+    container_name: spond-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: spond_bot
+      POSTGRES_USER: spond
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spond -d spond_bot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
     build: .
     container_name: spond-bot
-    restart: always
-    environment:
-      - TZ=Europe/Berlin
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-8080}:8080"
     env_file:
       - .env
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+
+volumes:
+  postgres_data:

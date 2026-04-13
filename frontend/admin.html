@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SpondBot — Admin</title>
+    <meta name="description" content="SpondBot administration dashboard." />
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      /* Admin-specific local overrides */
+      .page-content {
+        max-width: 1200px;
+      }
+      .admin-section {
+        margin-bottom: 2rem;
+      }
+      .filter-bar select,
+      .filter-bar input {
+        min-width: 130px;
+      }
+      .error-cell {
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.75rem;
+        color: var(--status-red);
+        cursor: help;
+      }
+      .page-content-full {
+        margin-left: var(--sidebar-width);
+        flex: 1;
+        padding: 2rem 2.5rem;
+      }
+      .toggle-cell {
+        display: flex;
+        align-items: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <!-- ── Sidebar ─────────────────────────────────────────────── -->
+      <aside class="sidebar">
+        <div class="sidebar-logo">
+          <span class="sidebar-logo-text">SpondBot</span>
+          <span class="sidebar-logo-badge">Admin</span>
+        </div>
+        <nav class="sidebar-nav" id="admin-nav">
+          <button
+            class="sidebar-item active"
+            data-view="events"
+            onclick="switchView('events', this)"
+          >
+            ${ICON.events} Events
+          </button>
+          <button
+            class="sidebar-item"
+            data-view="users"
+            onclick="switchView('users', this)"
+          >
+            ${ICON.user} Users
+          </button>
+          <button class="sidebar-item" data-view="sync" onclick="doSync()">
+            ${ICON.sync} Trigger Sync
+          </button>
+          <a class="sidebar-item" href="/dashboard">
+            ${ICON.overview} My Dashboard
+          </a>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="sidebar-user">
+            <div class="avatar" id="admin-avatar">A</div>
+            <div>
+              <div class="sidebar-username" id="admin-username">Admin</div>
+              <div
+                class="sidebar-role"
+                style="font-size: 0.7rem; color: var(--mint)"
+              >
+                Administrator
+              </div>
+            </div>
+          </div>
+          <button
+            class="btn btn-ghost btn-sm"
+            style="padding-left: 0"
+            onclick="signOut()"
+          >
+            ${ICON.logout} Sign Out
+          </button>
+        </div>
+      </aside>
+
+      <!-- ── Main Content ───────────────────────────────────────── -->
+      <main class="page-content-full">
+        <!-- Stats Bar -->
+        <div class="stats-bar" id="stats-bar">
+          <div class="stat-card">
+            <div class="stat-value" id="stat-users">—</div>
+            <div class="stat-label">Total Users</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-events">—</div>
+            <div class="stat-label">Total Events</div>
+          </div>
+          <div class="stat-card">
+            <div
+              class="stat-value"
+              id="stat-pending"
+              style="color: var(--status-amber)"
+            >
+              —
+            </div>
+            <div class="stat-label">Pending</div>
+          </div>
+          <div class="stat-card">
+            <div
+              class="stat-value"
+              id="stat-failed"
+              style="color: var(--status-red)"
+            >
+              —
+            </div>
+            <div class="stat-label">Failed</div>
+          </div>
+        </div>
+
+        <!-- ── Events View ──────────────────────────────────────── -->
+        <div id="view-events" class="admin-section">
+          <div class="page-header" style="margin-bottom: 1rem">
+            <h1 class="page-title">Events</h1>
+          </div>
+
+          <!-- Filter bar -->
+          <div class="filter-bar mb-2">
+            <select id="f-user" class="input" onchange="loadAdminEvents()">
+              <option value="">All Users</option>
+            </select>
+            <select id="f-status" class="input" onchange="loadAdminEvents()">
+              <option value="">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="processing">Processing</option>
+              <option value="processed">Processed</option>
+              <option value="failed">Failed</option>
+            </select>
+            <select id="f-choice" class="input" onchange="loadAdminEvents()">
+              <option value="">All Choices</option>
+              <option value="accept">Accept</option>
+              <option value="decline">Decline</option>
+              <option value="manual">Manual</option>
+            </select>
+            <input
+              id="f-search"
+              class="input search-input"
+              type="text"
+              placeholder="Search events…"
+              oninput="filterLocally()"
+            />
+            <button class="btn btn-outline" onclick="doSync()">
+              ${ICON.sync} Trigger Sync
+            </button>
+          </div>
+
+          <div class="table-container" id="events-table-wrap">
+            <div class="flex-center" style="padding: 2.5rem">
+              <span
+                class="spinner"
+                style="width: 22px; height: 22px; border-width: 3px"
+              ></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Users View ───────────────────────────────────────── -->
+        <div id="view-users" class="admin-section hidden">
+          <div class="page-header" style="margin-bottom: 1rem">
+            <h1 class="page-title">Users</h1>
+            <button class="btn btn-primary" onclick="showAddUserModal()">
+              ${ICON.plus} Add User
+            </button>
+          </div>
+
+          <!-- Frontend users table -->
+          <div class="section-header">
+            <span class="section-title">Dashboard Accounts</span>
+            <span class="text-muted text-sm"
+              >Users who can log into this admin panel</span
+            >
+          </div>
+          <div class="table-container mb-3" id="frontend-users-table">
+            <div class="flex-center" style="padding: 2rem">
+              <span
+                class="spinner"
+                style="width: 20px; height: 20px; border-width: 3px"
+              ></span>
+            </div>
+          </div>
+
+          <!-- Spond users table -->
+          <div
+            class="section-header mt-2"
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <div>
+              <span class="section-title">Spond Accounts</span>
+              <br /><span class="text-muted text-sm"
+                >Accounts managed by the bot</span
+              >
+            </div>
+            <button
+              class="btn btn-outline btn-sm"
+              onclick="showAddSpondModal()"
+            >
+              ${ICON.plus} Add Spond Account
+            </button>
+          </div>
+          <div class="table-container" id="spond-users-table">
+            <div class="flex-center" style="padding: 2rem">
+              <span
+                class="spinner"
+                style="width: 20px; height: 20px; border-width: 3px"
+              ></span>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Edit Event Decision Modal -->
+    <div class="modal-overlay hidden" id="edit-event-modal">
+      <div class="modal">
+        <h2 class="modal-title">Edit RSVP Decision</h2>
+        <p class="text-muted text-sm mb-2" id="edit-event-title"></p>
+        <div class="field">
+          <label>RSVP Choice</label>
+          <select id="edit-choice" class="input">
+            <option value="accept">Accept</option>
+            <option value="decline">Decline</option>
+            <option value="manual">Manual</option>
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button
+            class="btn btn-ghost"
+            onclick="closeModal('edit-event-modal')"
+          >
+            Cancel
+          </button>
+          <button class="btn btn-primary" onclick="saveEventDecision()">
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Frontend User Modal -->
+    <div class="modal-overlay hidden" id="add-user-modal">
+      <div class="modal">
+        <h2 class="modal-title">Create Dashboard Account</h2>
+        <div style="display: flex; flex-direction: column; gap: 1rem">
+          <div class="field">
+            <label>Username</label>
+            <input
+              id="new-username"
+              class="input"
+              type="text"
+              placeholder="e.g. felix"
+            />
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input
+              id="new-password"
+              class="input"
+              type="password"
+              placeholder="Min. 8 characters"
+              minlength="8"
+            />
+          </div>
+          <div class="field">
+            <label>Link to Spond Account</label>
+            <select id="new-linked-user" class="input">
+              <option value="">None (Admin only)</option>
+            </select>
+          </div>
+          <div
+            class="field"
+            style="flex-direction: row; align-items: center; gap: 0.75rem"
+          >
+            <label class="toggle">
+              <input type="checkbox" id="new-is-admin" />
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="text-sm">Admin privileges</span>
+          </div>
+        </div>
+        <div id="add-user-error" class="auth-error mt-1"></div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="closeModal('add-user-modal')">
+            Cancel
+          </button>
+          <button class="btn btn-primary" onclick="createFrontendUser()">
+            Create
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Frontend User Modal -->
+    <div class="modal-overlay hidden" id="edit-frontend-user-modal">
+      <div class="modal">
+        <h2 class="modal-title">Edit User Account</h2>
+        <p class="text-muted text-sm mb-2" id="edit-fu-username-label"></p>
+        <div style="display: flex; flex-direction: column; gap: 1rem">
+          <div class="field">
+            <label>Link to Spond Account</label>
+            <select id="edit-fu-linked-user" class="input"></select>
+          </div>
+          <div
+            class="field"
+            style="flex-direction: row; align-items: center; gap: 0.75rem"
+          >
+            <label class="toggle">
+              <input type="checkbox" id="edit-fu-is-admin" />
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="text-sm">Admin privileges</span>
+          </div>
+        </div>
+        <!-- Password Reset Section -->
+        <div
+          style="
+            margin-top: 1.25rem;
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--surface-container-high);
+          "
+        >
+          <div
+            class="section-title"
+            style="font-size: 0.8rem; margin-bottom: 0.75rem"
+          >
+            Reset Password
+            <span class="text-muted" style="font-weight: 400"
+              >(leave blank to keep current)</span
+            >
+          </div>
+          <div class="field">
+            <label
+              >New Password
+              <span style="font-weight: 400">(min. 8 chars)</span></label
+            >
+            <input
+              id="edit-fu-new-password"
+              class="input"
+              type="password"
+              placeholder="••••••••"
+              minlength="8"
+              autocomplete="new-password"
+            />
+          </div>
+        </div>
+        <div
+          id="edit-fu-error"
+          class="auth-error"
+          style="margin-top: 0.5rem"
+        ></div>
+        <div class="modal-footer">
+          <button
+            class="btn btn-ghost"
+            onclick="closeModal('edit-frontend-user-modal')"
+          >
+            Cancel
+          </button>
+          <button class="btn btn-primary" onclick="saveEditFrontendUser()">
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Spond User Modal -->
+    <div class="modal-overlay hidden" id="add-spond-modal">
+      <div class="modal">
+        <h2 class="modal-title">Link Spond Account</h2>
+        <p class="text-muted text-sm mb-2">
+          Automate RSVPs for a real Spond.com account.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 1rem">
+          <div class="field">
+            <label>Spond Login (Email/Phone)</label>
+            <input
+              id="spond-login"
+              class="input"
+              type="text"
+              placeholder="e.g. user@example.com"
+            />
+          </div>
+          <div class="field">
+            <label>Spond Password</label>
+            <input id="spond-password" class="input" type="password" />
+          </div>
+          <div class="field">
+            <label>Display Name (Internal)</label>
+            <input
+              id="spond-display-name"
+              class="input"
+              type="text"
+              placeholder="e.g. Alice - Soccer"
+            />
+          </div>
+        </div>
+        <div id="add-spond-error" class="auth-error mt-1"></div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="closeModal('add-spond-modal')">
+            Cancel
+          </button>
+          <button
+            class="btn btn-primary"
+            id="add-spond-btn"
+            onclick="addSpondAccount()"
+          >
+            Connect
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script src="app.js"></script>
+    <script>
+      // Fix template literals in static HTML
+      document.querySelectorAll("[data-view]").forEach((el) => {
+        const icons = [ICON.events, ICON.user, ICON.sync];
+        const labels = [" Events", " Users", " Trigger Sync"];
+        const i = ["events", "users", "sync"].indexOf(
+          el.dataset.view ?? el.getAttribute("onclick")?.match(/'(\w+)'/)?.[1],
+        );
+        if (i >= 0) el.innerHTML = icons[i] + labels[i];
+      });
+      document.querySelector(".sidebar-footer .btn-ghost").innerHTML =
+        ICON.logout + " Sign Out";
+      document
+        .getElementById("edit-event-modal")
+        .querySelector(".btn-outline")
+        ?.remove();
+      // Render sidebar + button icons
+      document.querySelector('a[href="/dashboard"]').innerHTML =
+        ICON.overview + " My Dashboard";
+      setTimeout(() => {
+        const sb = document.querySelector(".filter-bar .btn-outline");
+        if (sb) sb.innerHTML = ICON.sync + " Trigger Sync";
+        const ab = document.querySelector("#view-users .btn-primary");
+        if (ab) ab.innerHTML = ICON.plus + " Add User";
+        const sasb = document.querySelector("#view-users .btn-outline");
+        if (sasb) sasb.innerHTML = ICON.plus + " Add Spond Account";
+      }, 0);
+
+      // ── State ─────────────────────────────────────────────────────────
+      let adminPayload = null;
+      let allEvents = [];
+      let allSpondUsers = [];
+      let editEventId = null;
+      let editFrontendUserId = null;
+
+      // ── Init ───────────────────────────────────────────────────────────
+      async function init() {
+        // requireAdmin() calls /auth/me, 403s non-admins to dashboard, 401s to login
+        adminPayload = await requireAdmin();
+
+        document.getElementById("admin-username").textContent =
+          adminPayload.username;
+        document.getElementById("admin-avatar").textContent = initials(
+          adminPayload.username,
+        );
+
+        // Load Spond users FIRST so getUserName() has data when events render
+        await loadSpondUsers();
+        await Promise.all([loadStats(), loadAdminEvents()]);
+      }
+
+      // ── View switching ─────────────────────────────────────────────────
+      function switchView(view, btn) {
+        document
+          .getElementById("view-events")
+          .classList.toggle("hidden", view !== "events");
+        document
+          .getElementById("view-users")
+          .classList.toggle("hidden", view !== "users");
+        document
+          .querySelectorAll(".sidebar-item")
+          .forEach((s) => s.classList.remove("active"));
+        if (btn) btn.classList.add("active");
+        if (view === "users") loadUsersView();
+      }
+
+      // ── Stats ──────────────────────────────────────────────────────────
+      async function loadStats() {
+        try {
+          const [usersRes, eventsRes, pendingRes, failedRes] =
+            await Promise.all([
+              api("/users"),
+              api("/events?all=true"),
+              api("/events?all=true&status=pending"),
+              api("/events?all=true&status=failed"),
+            ]);
+          const [users, events, pending, failed] = await Promise.all([
+            usersRes.json(),
+            eventsRes.json(),
+            pendingRes.json(),
+            failedRes.json(),
+          ]);
+          document.getElementById("stat-users").textContent = users.length;
+          document.getElementById("stat-events").textContent = events.length;
+          document.getElementById("stat-pending").textContent = pending.length;
+          document.getElementById("stat-failed").textContent = failed.length;
+        } catch {}
+      }
+
+      // ── Load Spond Users (for filter dropdown) ─────────────────────────
+      async function loadSpondUsers() {
+        try {
+          const res = await api("/users");
+          if (!res.ok) return;
+          allSpondUsers = await res.json();
+          const sel = document.getElementById("f-user");
+          allSpondUsers.forEach((u) => {
+            const opt = document.createElement("option");
+            opt.value = u.id;
+            opt.textContent = u.display_name;
+            sel.appendChild(opt);
+          });
+          // also populate modal dropdown
+          const linkSel = document.getElementById("new-linked-user");
+          linkSel.innerHTML = '<option value="">None (Admin only)</option>';
+          allSpondUsers.forEach((u) => {
+            const opt = document.createElement("option");
+            opt.value = u.id;
+            opt.textContent = `${u.display_name} (${u.login})`;
+            linkSel.appendChild(opt);
+          });
+        } catch {}
+      }
+
+      // ── Load Events (admin view) ───────────────────────────────────────
+      async function loadAdminEvents() {
+        const wrap = document.getElementById("events-table-wrap");
+        wrap.innerHTML = `<div class="flex-center" style="padding:2.5rem"><span class="spinner" style="width:22px;height:22px;border-width:3px;"></span></div>`;
+
+        const user_id = document.getElementById("f-user")?.value;
+        const status = document.getElementById("f-status")?.value;
+        const choice = document.getElementById("f-choice")?.value;
+
+        let url = "/events?all=true&";
+        if (user_id) url += `user_id=${user_id}&`;
+        if (status) url += `status=${status}&`;
+        if (choice) url += `choice=${choice}&`;
+
+        try {
+          const res = await api(url);
+          if (!res.ok) throw new Error("Failed");
+          let data = await res.json();
+
+          allEvents = data.sort((a, b) => {
+            const timeA = a.start_timestamp
+              ? new Date(a.start_timestamp).getTime()
+              : Infinity;
+            const timeB = b.start_timestamp
+              ? new Date(b.start_timestamp).getTime()
+              : Infinity;
+            return timeA - timeB;
+          });
+
+          filterLocally();
+        } catch (err) {
+          wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">Failed to load events</div></div>`;
+        }
+      }
+
+      function filterLocally() {
+        const q = (
+          document.getElementById("f-search")?.value || ""
+        ).toLowerCase();
+        const filtered = q
+          ? allEvents.filter((e) => (e.heading || "").toLowerCase().includes(q))
+          : allEvents;
+        renderEventsTable(filtered);
+      }
+
+      function getUserName(userId) {
+        const u = allSpondUsers.find((u) => u.id === userId);
+        return u ? u.display_name : userId?.slice(0, 8) + "…";
+      }
+
+      function renderEventsTable(events) {
+        const wrap = document.getElementById("events-table-wrap");
+        if (!events.length) {
+          wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">No events match your filters</div></div>`;
+          return;
+        }
+        wrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr>
+          <th>User</th><th>Event</th><th>Date</th>
+          <th>RSVP</th><th>Status</th><th>Error</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          ${events
+            .map(
+              (ev) => `
+            <tr>
+              <td style="white-space:nowrap">${escHtml(getUserName(ev.user_id))}</td>
+              <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(ev.heading || "")}">${escHtml(ev.heading || "—")}</td>
+              <td style="white-space:nowrap;color:var(--text-muted)">${fmtDateShort(ev.start_timestamp)}</td>
+              <td>${choiceBadge(ev.user_choice)}</td>
+              <td>${statusBadge(ev.status)}</td>
+              <td><span class="error-cell" title="${escHtml(ev.error_message || "")}">${ev.error_message ? escHtml(ev.error_message) : "—"}</span></td>
+              <td>
+                <div class="action-btns">
+                  <button class="btn btn-ghost btn-sm" onclick="openEditEvent('${ev.id}','${escHtml(ev.heading || "")}','${ev.user_choice}')">Edit</button>
+                  ${ev.status === "failed" ? `<button class="btn btn-outline btn-sm" onclick="retryEvent('${ev.id}')">Retry</button>` : ""}
+                </div>
+              </td>
+            </tr>`,
+            )
+            .join("")}
+        </tbody>
+      </table>`;
+      }
+
+      // ── Edit Event Decision ────────────────────────────────────────────
+      function openEditEvent(id, heading, choice) {
+        editEventId = id;
+        document.getElementById("edit-event-title").textContent = heading;
+        document.getElementById("edit-choice").value = choice;
+        document.getElementById("edit-event-modal").classList.remove("hidden");
+      }
+
+      async function saveEventDecision() {
+        const choice = document.getElementById("edit-choice").value;
+        try {
+          const res = await api(`/events/${editEventId}/decision`, "PATCH", {
+            user_choice: choice,
+          });
+          if (!res.ok) throw new Error((await res.json()).detail || "Failed");
+          closeModal("edit-event-modal");
+          showToast("Decision updated.", "success");
+          loadAdminEvents();
+          loadStats();
+        } catch (err) {
+          showToast(err.message, "error");
+        }
+      }
+
+      async function retryEvent(id) {
+        try {
+          const res = await api(`/events/${id}/decision`, "PATCH", {
+            user_choice: "accept",
+          });
+          if (!res.ok) throw new Error((await res.json()).detail || "Failed");
+          showToast("Event queued for retry.", "success");
+          loadAdminEvents();
+          loadStats();
+        } catch (err) {
+          showToast(err.message, "error");
+        }
+      }
+
+      // ── Users View ─────────────────────────────────────────────────────
+      async function loadUsersView() {
+        loadFrontendUsersTable();
+        renderSpondUsersTable();
+      }
+
+      async function loadFrontendUsersTable() {
+        const wrap = document.getElementById("frontend-users-table");
+        wrap.innerHTML = `<div class="flex-center" style="padding:2rem"><span class="spinner" style="width:20px;height:20px;border-width:3px;"></span></div>`;
+        try {
+          const res = await api("/auth/users");
+          if (!res.ok) throw new Error("Failed");
+          const users = await res.json();
+          if (!users.length) {
+            wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">No dashboard accounts</div></div>`;
+            return;
+          }
+          wrap.innerHTML = `
+        <table class="data-table">
+          <thead><tr><th>Username</th><th>Role</th><th>Linked Spond Account</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${users
+              .map(
+                (u) => `
+              <tr>
+                <td>${escHtml(u.username)}</td>
+                <td>${u.is_admin ? '<span class="badge badge-accept">Admin</span>' : '<span class="badge badge-manual">User</span>'}</td>
+                <td style="color:var(--text-muted)">${u.linked_user_id ? allSpondUsers.find((s) => s.id === u.linked_user_id)?.display_name || u.linked_user_id.slice(0, 8) + "…" : "—"}</td>
+                <td>
+                  <div class="action-btns">
+                    <button class="btn btn-ghost btn-sm" onclick="openEditFrontendUser('${u.id}','${escHtml(u.username)}',${u.is_admin},'${u.linked_user_id || ""}')">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteFrontendUser('${u.id}','${escHtml(u.username)}')">Delete</button>
+                  </div>
+                </td>
+              </tr>`,
+              )
+              .join("")}
+          </tbody>
+        </table>`;
+        } catch {
+          wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">Failed to load</div></div>`;
+        }
+      }
+
+      function renderSpondUsersTable() {
+        const wrap = document.getElementById("spond-users-table");
+        if (!allSpondUsers.length) {
+          wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">No Spond accounts registered</div></div>`;
+          return;
+        }
+        wrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>Login</th><th>Active</th><th>Profile ID</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${allSpondUsers
+            .map(
+              (u) => `
+            <tr>
+              <td>${escHtml(u.display_name)}</td>
+              <td style="color:var(--text-muted)">${escHtml(u.login)}</td>
+              <td>
+                <label class="toggle">
+                  <input type="checkbox" ${u.is_active ? "checked" : ""} onchange="toggleSpondUser('${u.id}', this.checked)">
+                  <span class="toggle-slider"></span>
+                </label>
+              </td>
+              <td style="color:var(--text-dim);font-size:0.72rem;font-family:monospace">${u.profile_id?.slice(0, 12) || "—"}…</td>
+              <td>
+                <div class="action-btns">
+                  <button class="btn btn-danger btn-sm" onclick="deleteSpondUser('${u.id}','${escHtml(u.display_name)}')">Delete</button>
+                </div>
+              </td>
+            </tr>`,
+            )
+            .join("")}
+        </tbody>
+      </table>`;
+      }
+
+      async function toggleSpondUser(id, active) {
+        try {
+          const res = await api(`/users/${id}`, "PATCH", { is_active: active });
+          if (!res.ok) throw new Error((await res.json()).detail || "Failed");
+          showToast(
+            `Account ${active ? "activated" : "deactivated"}.`,
+            "success",
+          );
+          loadStats();
+        } catch (err) {
+          showToast(err.message, "error");
+        }
+      }
+
+      async function deleteSpondUser(id, name) {
+        if (
+          !confirm(`Delete Spond account for "${name}" and all their events?`)
+        )
+          return;
+        try {
+          const res = await api(`/users/${id}`, "DELETE");
+          if (!res.ok && res.status !== 204)
+            throw new Error((await res.json()).detail || "Failed");
+          allSpondUsers = allSpondUsers.filter((u) => u.id !== id);
+          renderSpondUsersTable();
+          showToast(`Account for "${name}" deleted.`, "success");
+          loadStats();
+          loadAdminEvents();
+        } catch (err) {
+          showToast(err.message, "error");
+        }
+      }
+
+      async function deleteFrontendUser(id, username) {
+        if (!confirm(`Delete dashboard account "${username}"?`)) return;
+        try {
+          const res = await api(`/auth/users/${id}`, "DELETE");
+          if (!res.ok && res.status !== 204)
+            throw new Error((await res.json()).detail || "Failed");
+          loadFrontendUsersTable();
+          showToast(`Account "${username}" deleted.`, "success");
+        } catch (err) {
+          showToast(err.message, "error");
+        }
+      }
+
+      // ── Edit Frontend User (role/link toggle) ──────────────────────────
+      function openEditFrontendUser(id, username, isAdmin, linkedId) {
+        editFrontendUserId = id;
+        document.getElementById("edit-fu-username-label").textContent =
+          `Editing: ${username}`;
+        document.getElementById("edit-fu-is-admin").checked = isAdmin;
+        document.getElementById("edit-fu-new-password").value = "";
+        document.getElementById("edit-fu-error").style.display = "none";
+
+        // Populate the Spond account dropdown
+        const sel = document.getElementById("edit-fu-linked-user");
+        sel.innerHTML =
+          '<option value="">None</option>' +
+          allSpondUsers
+            .map(
+              (u) =>
+                `<option value="${u.id}" ${u.id === linkedId ? "selected" : ""}>${escHtml(u.display_name)} (${escHtml(u.login)})</option>`,
+            )
+            .join("");
+
+        document
+          .getElementById("edit-frontend-user-modal")
+          .classList.remove("hidden");
+      }
+
+      async function saveEditFrontendUser() {
+        const errEl = document.getElementById("edit-fu-error");
+        const is_admin = document.getElementById("edit-fu-is-admin").checked;
+        const linked_user_id =
+          document.getElementById("edit-fu-linked-user").value || null;
+        const new_password = document.getElementById(
+          "edit-fu-new-password",
+        ).value;
+        errEl.style.display = "none";
+
+        if (new_password && new_password.length < 8) {
+          errEl.textContent = "Password must be at least 8 characters.";
+          errEl.style.display = "block";
+          return;
+        }
+
+        const body = { is_admin, linked_user_id };
+        if (new_password) body.new_password = new_password;
+
+        try {
+          const res = await api(
+            `/auth/users/${editFrontendUserId}`,
+            "PATCH",
+            body,
+          );
+          if (!res.ok) throw new Error((await res.json()).detail || "Failed");
+          closeModal("edit-frontend-user-modal");
+          showToast("User updated.", "success");
+          loadFrontendUsersTable();
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.style.display = "block";
+        }
+      }
+
+      // ── Create Frontend User ───────────────────────────────────────────
+      function showAddUserModal() {
+        document.getElementById("new-username").value = "";
+        document.getElementById("new-password").value = "";
+        document.getElementById("new-linked-user").value = "";
+        document.getElementById("new-is-admin").checked = false;
+        document.getElementById("add-user-error").style.display = "none";
+        document.getElementById("add-user-modal").classList.remove("hidden");
+      }
+
+      async function createFrontendUser() {
+        const errEl = document.getElementById("add-user-error");
+        const username = document.getElementById("new-username").value.trim();
+        const password = document.getElementById("new-password").value;
+        const linked = document.getElementById("new-linked-user").value || null;
+        const is_admin = document.getElementById("new-is-admin").checked;
+
+        errEl.style.display = "none";
+        if (!username || !password) {
+          errEl.textContent = "Username and password required.";
+          errEl.style.display = "block";
+          return;
+        }
+
+        try {
+          const res = await api("/auth/users", "POST", {
+            username,
+            password,
+            linked_user_id: linked,
+            is_admin,
+          });
+          if (!res.ok) {
+            const e = await res.json();
+            throw new Error(e.detail || "Failed");
+          }
+          closeModal("add-user-modal");
+          showToast(`Account "${username}" created.`, "success");
+          loadFrontendUsersTable();
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.style.display = "block";
+        }
+      }
+
+      // ── Create Spond Account ───────────────────────────────────────────
+      function showAddSpondModal() {
+        document.getElementById("spond-login").value = "";
+        document.getElementById("spond-password").value = "";
+        document.getElementById("spond-display-name").value = "";
+        document.getElementById("add-spond-error").style.display = "none";
+        document.getElementById("add-spond-modal").classList.remove("hidden");
+      }
+
+      async function addSpondAccount() {
+        const errEl = document.getElementById("add-spond-error");
+        const btn = document.getElementById("add-spond-btn");
+        const login = document.getElementById("spond-login").value.trim();
+        const password = document.getElementById("spond-password").value;
+        const display_name =
+          document.getElementById("spond-display-name").value.trim() ||
+          login.split("@")[0];
+
+        errEl.style.display = "none";
+        if (!login || !password) {
+          errEl.textContent = "Login and password required.";
+          errEl.style.display = "block";
+          return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Connecting...';
+
+        try {
+          const res = await api("/users", "POST", {
+            login,
+            password,
+            display_name,
+          });
+          if (!res.ok) {
+            const e = await res.json();
+            throw new Error(e.detail || "Failed");
+          }
+          closeModal("add-spond-modal");
+          showToast("Spond account connected successfully!", "success");
+          await loadSpondUsers();
+          renderSpondUsersTable();
+          loadStats();
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.style.display = "block";
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Connect";
+        }
+      }
+
+      // ── Sync ───────────────────────────────────────────────────────────
+      async function doSync() {
+        try {
+          const res = await api("/sync", "POST");
+          if (!res.ok) throw new Error((await res.json()).detail || "Failed");
+          showToast("Discovery sync triggered.", "success");
+          setTimeout(() => {
+            loadAdminEvents();
+            loadStats();
+          }, 5000);
+        } catch (err) {
+          showToast(err.message, "error");
+        }
+      }
+
+      // ── Utils ──────────────────────────────────────────────────────────
+      function closeModal(id) {
+        document.getElementById(id).classList.add("hidden");
+      }
+      function escHtml(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      // Close modals on overlay click
+      document.querySelectorAll(".modal-overlay").forEach((el) => {
+        el.addEventListener("click", function (e) {
+          if (e.target === this) this.classList.add("hidden");
+        });
+      });
+
+      init();
+    </script>
+  </body>
+</html>

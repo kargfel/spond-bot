@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SpondBot — My Events</title>
+    <meta
+      name="description"
+      content="View and manage your Spond event RSVP responses."
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <!-- ── Sidebar ─────────────────────────────────────────────── -->
+      <aside class="sidebar">
+        <div class="sidebar-logo">
+          <span class="sidebar-logo-text">SpondBot</span>
+        </div>
+        <nav class="sidebar-nav">
+          <button
+            class="sidebar-item active"
+            onclick="window.location.reload()"
+          >
+            ${ICON.events} My Events
+          </button>
+          <button class="sidebar-item" onclick="showProfileModal()">
+            ${ICON.user} My Profile
+          </button>
+          <!-- Only shown for admin accounts -->
+          <a class="sidebar-item hidden" id="admin-nav-link" href="/admin">
+            ${ICON.shield} Admin Panel
+          </a>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="sidebar-user">
+            <div class="avatar" id="user-avatar">?</div>
+            <div>
+              <div class="sidebar-username" id="user-display-name">
+                Loading…
+              </div>
+              <div class="sidebar-role text-muted" style="font-size: 0.7rem">
+                Spond Member
+              </div>
+            </div>
+          </div>
+          <button
+            class="btn btn-ghost btn-sm"
+            style="padding-left: 0"
+            onclick="signOut()"
+          >
+            ${ICON.logout} Sign Out
+          </button>
+        </div>
+      </aside>
+
+      <!-- ── Main Content ───────────────────────────────────────── -->
+      <main class="page-content">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">My Events</h1>
+            <p class="text-muted text-sm mt-1">
+              Manage your automated RSVP responses
+            </p>
+          </div>
+          <button class="btn btn-outline" id="sync-btn" onclick="triggerSync()">
+            ${ICON.sync} Sync Now
+          </button>
+        </div>
+
+        <!-- Status Filter Tabs -->
+        <div class="filter-tabs" id="status-tabs">
+          <button
+            class="filter-tab active"
+            data-status=""
+            onclick="setFilter(this, '')"
+          >
+            All
+          </button>
+          <button
+            class="filter-tab"
+            data-status="pending"
+            onclick="setFilter(this, 'pending')"
+          >
+            Pending
+          </button>
+          <button
+            class="filter-tab"
+            data-status="processed"
+            onclick="setFilter(this, 'processed')"
+          >
+            Processed
+          </button>
+          <button
+            class="filter-tab"
+            data-status="failed"
+            onclick="setFilter(this, 'failed')"
+          >
+            Failed
+          </button>
+        </div>
+
+        <!-- Events list -->
+        <div id="events-container">
+          <div class="flex-center" style="padding: 3rem 0">
+            <span
+              class="spinner"
+              style="width: 24px; height: 24px; border-width: 3px"
+            ></span>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Profile Modal -->
+    <div class="modal-overlay hidden" id="profile-modal">
+      <div class="modal">
+        <h2 class="modal-title">My Profile</h2>
+        <div style="display: flex; flex-direction: column; gap: 1rem">
+          <div class="field">
+            <label>Display Name</label>
+            <input id="profile-name" class="input" type="text" />
+          </div>
+          <div class="field">
+            <label>Username</label>
+            <input
+              class="input"
+              type="text"
+              id="profile-username"
+              disabled
+              style="opacity: 0.5; cursor: not-allowed"
+            />
+          </div>
+          <div class="field">
+            <label>Spond Login</label>
+            <input
+              class="input"
+              type="text"
+              id="profile-login"
+              disabled
+              style="opacity: 0.5; cursor: not-allowed"
+            />
+          </div>
+        </div>
+
+        <!-- Password Change Section -->
+        <div
+          style="
+            margin-top: 1.25rem;
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--surface-container-high);
+          "
+        >
+          <div
+            class="section-title"
+            style="font-size: 0.8rem; margin-bottom: 0.75rem"
+          >
+            Change Password
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 0.75rem">
+            <div class="field">
+              <label>Current Password</label>
+              <input
+                id="pw-current"
+                class="input"
+                type="password"
+                placeholder="••••••••"
+                autocomplete="current-password"
+              />
+            </div>
+            <div class="field">
+              <label
+                >New Password
+                <span style="font-weight: 400">(min. 8 chars)</span></label
+              >
+              <input
+                id="pw-new"
+                class="input"
+                type="password"
+                placeholder="••••••••"
+                minlength="8"
+                autocomplete="new-password"
+              />
+            </div>
+            <div class="field">
+              <label>Confirm New Password</label>
+              <input
+                id="pw-confirm"
+                class="input"
+                type="password"
+                placeholder="••••••••"
+                autocomplete="new-password"
+              />
+            </div>
+            <button class="btn btn-outline" onclick="changePassword()">
+              Update Password
+            </button>
+          </div>
+        </div>
+
+        <div
+          id="profile-error"
+          class="auth-error"
+          style="margin-top: 0.5rem"
+        ></div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="closeProfileModal()">
+            Cancel
+          </button>
+          <button class="btn btn-primary" onclick="saveProfile()">
+            Save Profile
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script src="app.js"></script>
+    <script>
+      // Replace template literals that couldn't render before app.js loaded
+      document.querySelector(".sidebar-item.active").innerHTML =
+        ICON.events + " My Events";
+      document.querySelector(".sidebar-item:nth-child(2)").innerHTML =
+        ICON.user + " My Profile";
+      document.getElementById("admin-nav-link").innerHTML =
+        ICON.shield + " Admin Panel";
+      document.querySelector(".sidebar-footer .btn-ghost").innerHTML =
+        ICON.logout + " Sign Out";
+      document.querySelector("#sync-btn").innerHTML = ICON.sync + " Sync Now";
+
+      // ── State ─────────────────────────────────────────────────────────
+      let payload = null; // populated by init() after requireAuth()
+      let statusFilter = "";
+      let spond_user = null;
+
+      // ── Init ───────────────────────────────────────────────────────────
+      async function init() {
+        // requireAuth() calls /auth/me and redirects to login if unauthenticated
+        payload = await requireAuth();
+
+        // Populate sidebar user info from server-returned claims
+        const username = payload.username || "?";
+        document.getElementById("user-avatar").textContent = initials(username);
+        document.getElementById("user-display-name").textContent = username;
+
+        // Show admin panel link if the user is an admin
+        if (payload.is_admin) {
+          document.getElementById("admin-nav-link").classList.remove("hidden");
+          document.querySelector(".sidebar-role").textContent = "Administrator";
+          document.querySelector(".sidebar-role").style.color = "var(--mint)";
+        }
+
+        // If user has a linked Spond account, fetch display_name from it
+        if (payload.linked_user_id) {
+          try {
+            const res = await api(`/users/${payload.linked_user_id}`);
+            if (res.ok) {
+              spond_user = await res.json();
+              document.getElementById("user-display-name").textContent =
+                spond_user.display_name;
+              document.getElementById("user-avatar").textContent = initials(
+                spond_user.display_name,
+              );
+            }
+          } catch {}
+        }
+
+        loadEvents();
+      }
+
+      // ── Load Events ────────────────────────────────────────────────────
+      async function loadEvents() {
+        const container = document.getElementById("events-container");
+        container.innerHTML = `<div class="flex-center" style="padding:3rem 0"><span class="spinner" style="width:24px;height:24px;border-width:3px;"></span></div>`;
+
+        let url = "/events";
+        if (statusFilter) url += `?status=${statusFilter}`;
+
+        try {
+          const res = await api(url);
+          if (res.status === 401) {
+            await redirectToLogin();
+            return;
+          }
+          if (!res.ok) throw new Error("Failed to load events");
+          let events = await res.json();
+
+          // Sort by the Date the Event happens (start_timestamp), not by status
+          events = events.sort((a, b) => {
+            const timeA = a.start_timestamp
+              ? new Date(a.start_timestamp).getTime()
+              : Infinity;
+            const timeB = b.start_timestamp
+              ? new Date(b.start_timestamp).getTime()
+              : Infinity;
+            return timeA - timeB;
+          });
+
+          renderEvents(events);
+        } catch (err) {
+          container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Could not load events</div><div class="empty-state-sub">${err.message}</div></div>`;
+        }
+      }
+
+      function setFilter(el, status) {
+        statusFilter = status;
+        document
+          .querySelectorAll(".filter-tab")
+          .forEach((t) => t.classList.remove("active"));
+        el.classList.add("active");
+        loadEvents();
+      }
+
+      // ── Render Events ──────────────────────────────────────────────────
+      function renderEvents(events) {
+        const container = document.getElementById("events-container");
+        if (!events.length) {
+          container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-title">No events found</div>
+          <div class="empty-state-sub">Use "Sync Now" to discover new events from Spond.</div>
+          <button class="btn btn-outline" onclick="triggerSync()">Sync Now</button>
+        </div>`;
+          return;
+        }
+
+        container.innerHTML = `<div class="events-list">${events.map(renderEventCard).join("")}</div>`;
+      }
+
+      function renderEventCard(ev) {
+        const isProcessed = ev.status === "processed";
+        // invite_time = when Spond locks the RSVP window (the real "respond by" deadline).
+        // rsvp_date   = event registration close date — a different concept, shown as fallback.
+        const deadlineTs = ev.invite_time || ev.rsvp_date;
+        let deadlineMeta = "";
+        if (isProcessed && deadlineTs) {
+          // For completed events: neutral confirmation stamp, no red, no "RSVP by"
+          deadlineMeta = `<span class="event-meta-item" style="color:var(--mint)">${ICON.clock} RSVPed before ${fmtDate(deadlineTs)}</span>`;
+        } else if (deadlineTs) {
+          deadlineMeta = `<span class="event-meta-item" style="${isOverdue(deadlineTs) ? "color:var(--status-red)" : ""}"><span title="${ev.invite_time ? "RSVP deadline (inviteTime)" : "Registration deadline (rsvpDate)"}">${ICON.clock} RSVP by ${fmtDate(deadlineTs)}</span></span>`;
+        }
+        const errorHtml = ev.error_message
+          ? `<div class="event-error">${ev.error_message}</div>`
+          : "";
+
+        return `
+      <div class="event-card" id="card-${ev.id}">
+        <div class="event-card-bar ${ev.status}"></div>
+        <div class="event-card-body">
+          <div class="event-card-info">
+            <div class="event-title">${escHtml(ev.heading || "Untitled Event")}</div>
+            <div class="event-meta">
+              ${ev.start_timestamp ? `<span class="event-meta-item">${ICON.calendar} ${fmtDate(ev.start_timestamp)}</span>` : ""}
+              ${deadlineMeta}
+            </div>
+            ${errorHtml}
+          </div>
+          <div class="event-card-actions">
+            <div class="event-badges">
+              ${choiceBadge(ev.user_choice)}
+              ${statusBadge(ev.status)}
+            </div>
+            <div class="rsvp-buttons">
+              <button class="rsvp-btn accept ${ev.user_choice === "accept" ? "active" : ""}"
+                onclick="setDecision('${ev.id}', 'accept')">Accept</button>
+              <button class="rsvp-btn decline ${ev.user_choice === "decline" ? "active" : ""}"
+                onclick="setDecision('${ev.id}', 'decline')">Decline</button>
+              <button class="rsvp-btn manual ${ev.user_choice === "manual" ? "active" : ""}"
+                onclick="setDecision('${ev.id}', 'manual')">Manual</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+      }
+
+      // ── RSVP Decision ──────────────────────────────────────────────────
+      async function setDecision(eventId, choice) {
+        try {
+          const res = await api(`/events/${eventId}/decision`, "PATCH", {
+            user_choice: choice,
+          });
+          if (!res.ok)
+            throw new Error((await res.json()).detail || "Update failed");
+          const updated = await res.json();
+          // Optimistic update of the card
+          const card = document.getElementById(`card-${eventId}`);
+          if (card) {
+            card.outerHTML = renderEventCard(updated);
+          }
+          showToast(`RSVP set to "${choice}"`, "success");
+        } catch (err) {
+          showToast(err.message, "error");
+        }
+      }
+
+      // ── Sync ───────────────────────────────────────────────────────────
+      async function triggerSync() {
+        const btn = document.getElementById("sync-btn");
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner"></span> Syncing…`;
+        try {
+          const res = await api("/sync", "POST");
+          if (!res.ok && res.status !== 403) throw new Error("Sync failed");
+          showToast(
+            res.status === 403
+              ? "Only admins can trigger sync."
+              : "Discovery sync triggered — events will update shortly.",
+            res.status === 403 ? "info" : "success",
+          );
+          setTimeout(loadEvents, 4000);
+        } catch (err) {
+          showToast(err.message, "error");
+        } finally {
+          setTimeout(() => {
+            btn.disabled = false;
+            btn.innerHTML = ICON.sync + " Sync Now";
+          }, 5000);
+        }
+      }
+
+      // ── Profile Modal ──────────────────────────────────────────────────
+      function showProfileModal() {
+        document.getElementById("profile-username").value = payload.username;
+        document.getElementById("pw-current").value = "";
+        document.getElementById("pw-new").value = "";
+        document.getElementById("pw-confirm").value = "";
+        document.getElementById("profile-error").style.display = "none";
+        if (spond_user) {
+          document.getElementById("profile-name").value =
+            spond_user.display_name;
+          document.getElementById("profile-login").value = spond_user.login;
+        }
+        document.getElementById("profile-modal").classList.remove("hidden");
+      }
+
+      function closeProfileModal() {
+        document.getElementById("profile-modal").classList.add("hidden");
+      }
+
+      async function saveProfile() {
+        const name = document.getElementById("profile-name").value.trim();
+        if (!name || !spond_user) return;
+        try {
+          const res = await api(`/users/${spond_user.id}`, "PATCH", {
+            display_name: name,
+          });
+          if (!res.ok)
+            throw new Error((await res.json()).detail || "Update failed");
+          spond_user = await res.json();
+          document.getElementById("user-display-name").textContent =
+            spond_user.display_name;
+          document.getElementById("user-avatar").textContent = initials(
+            spond_user.display_name,
+          );
+          closeProfileModal();
+          showToast("Profile updated.", "success");
+        } catch (err) {
+          showToast(err.message, "error");
+        }
+      }
+
+      async function changePassword() {
+        const errEl = document.getElementById("profile-error");
+        const current = document.getElementById("pw-current").value;
+        const newPw = document.getElementById("pw-new").value;
+        const confirm = document.getElementById("pw-confirm").value;
+        errEl.style.display = "none";
+        if (!current || !newPw) {
+          errEl.textContent = "Fill in current and new password.";
+          errEl.style.display = "block";
+          return;
+        }
+        if (newPw.length < 8) {
+          errEl.textContent = "New password must be at least 8 characters.";
+          errEl.style.display = "block";
+          return;
+        }
+        if (newPw !== confirm) {
+          errEl.textContent = "Passwords do not match.";
+          errEl.style.display = "block";
+          return;
+        }
+        try {
+          const res = await api("/auth/me/password", "PATCH", {
+            current_password: current,
+            new_password: newPw,
+          });
+          if (!res.ok) throw new Error((await res.json()).detail || "Failed");
+          document.getElementById("pw-current").value = "";
+          document.getElementById("pw-new").value = "";
+          document.getElementById("pw-confirm").value = "";
+          showToast("Password updated successfully.", "success");
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.style.display = "block";
+        }
+      }
+
+      // ── Utility ────────────────────────────────────────────────────────
+      function escHtml(str) {
+        return str
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      // Close modal on overlay click
+      document
+        .getElementById("profile-modal")
+        .addEventListener("click", function (e) {
+          if (e.target === this) closeProfileModal();
+        });
+
+      init();
+    </script>
+  </body>
+</html>
