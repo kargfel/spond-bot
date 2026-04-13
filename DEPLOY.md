@@ -1,8 +1,12 @@
-# SpondBot — Multi-Node Deployment Guide (Traefik JumpHost)
+# 🚀 Advanced SpondBot Deployment Guide
+
+This guide is intended for power users, system administrators, and those exposing SpondBot securely to the public internet using a reverse proxy. 
+
+Below is an example of a **Multi-Node Deployment using a Traefik JumpHost**. In this scenario, the app runs on a `mainApps` VM, while Traefik handles SSL termination on a separate `jumpHost`.
 
 Deployment target: **`/home/felix/stacks/spondApp`** on your `mainApps` VM.
 JumpHost target: Your frontend Traefik instance managing Let's Encrypt certificates.
-Public URL: **`https://spond.felixkarg.de`** via Traefik.
+Public URL: **`https://spond.yourdomain.com`** via Traefik.
 
 ---
 
@@ -22,14 +26,14 @@ Because SpondBot will be running on a dedicated `mainApps` VM while Traefik runs
 SSH into your `mainApps` VM and create the app directory:
 
 ```bash
-mkdir -p /home/felix/stacks/spondApp
-cd /home/felix/stacks/spondApp
+mkdir -p /home/user/stacks/spondApp
+cd /home/user/stacks/spondApp
 ```
 
 Clone the repository:
 
 ```bash
-git clone https://github.com/YOUR_USER/Spond.git .
+git clone https://github.com/kargfel/spond-bot.git .
 ```
 
 Create the `.env` file:
@@ -57,7 +61,7 @@ Fill in `.env` with your actual values:
 | `DATABASE_URL` | `postgresql+asyncpg://spond:<DB_PASSWORD>@db:5432/spond_bot` |
 | `FERNET_KEY` | Output of the python command above |
 | `API_KEY` | Output of openssl command above |
-| `SITE_DOMAIN` | `spond.felixkarg.de` |
+| `SITE_DOMAIN` | `spond.yourdomain.com` |
 | `APP_PORT` | `8080` |
 | `ADMIN_USERNAME` | Your desired admin username |
 | `ADMIN_PASSWORD` | A strong unique password |
@@ -82,7 +86,7 @@ Create a new file (e.g., `spondbot.yml`) in your Traefik dynamic configurations 
 http:
   routers:
     spondbot-router:
-      rule: "Host(`spond.felixkarg.de`)"
+      rule: "Host(`spond.yourdomain.com`)"
       service: spondbot-service
       entryPoints:
         - websecure
@@ -106,12 +110,12 @@ From the internet (or another network entirely):
 
 ```bash
 # Test path traversal is fixed (should return index.html, not your .env)
-curl -s https://spond.felixkarg.de/..%2F.env | head -c 50
+curl -s https://spond.yourdomain.com/..%2F.env | head -c 50
 # Expected: <!DOCTYPE html> ...
 
 # Test rate limiting (6th attempt within a minute should return 429)
 for i in $(seq 1 6); do curl -s -o /dev/null -w "%{http_code}\n" \
-  -X POST https://spond.felixkarg.de/api/v1/auth/login \
+  -X POST https://spond.yourdomain.com/api/v1/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"x","password":"x"}'; done
 # Expected: 401 401 401 401 401 429
@@ -123,7 +127,7 @@ for i in $(seq 1 6); do curl -s -o /dev/null -w "%{http_code}\n" \
 
 ### Update the app on `mainApps`
 ```bash
-cd /home/felix/stacks/spondApp
+cd /home/user/stacks/spondApp
 git pull
 docker compose up -d --build
 ```
