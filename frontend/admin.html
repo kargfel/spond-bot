@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SpondBot — Admin</title>
     <meta name="description" content="SpondBot administration dashboard." />
-    <link rel="stylesheet" href="style.css?v=2" />
+    <link rel="stylesheet" href="style.css?v=3" />
     <style>
       /* Admin-specific local overrides */
       .page-content {
@@ -28,10 +28,9 @@
         cursor: help;
       }
       .page-content-full {
-        margin-left: var(--sidebar-width);
+        margin-left: var(--sidebar-width-icon);
         flex: 1;
-        padding: 2rem 2.5rem;
-        padding-bottom: calc(var(--mobile-nav-height) + 1rem);
+        /* Responsive overrides handled by style.css media queries */
       }
       .toggle-cell {
         display: flex;
@@ -457,7 +456,7 @@
 
     <div id="toast-container"></div>
 
-    <script src="app.js?v=2"></script>
+    <script src="app.js?v=3"></script>
     <script>
       // Fix template literals in static HTML
       document.querySelectorAll("[data-view]").forEach((el) => {
