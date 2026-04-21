@@ -18,10 +18,18 @@
           Spond<span class="logo-dim">Bot</span>
         </div>
         <div class="mobile-header-right">
-          <button class="btn btn-outline btn-sm" id="mobile-sync-btn" onclick="triggerSync()">
+          <button
+            class="btn btn-outline btn-sm"
+            id="mobile-sync-btn"
+            onclick="triggerSync()"
+          >
             ${ICON.sync} Sync
           </button>
-          <div class="mobile-header-avatar" id="mobile-avatar" onclick="showProfileModal()">
+          <div
+            class="mobile-header-avatar"
+            id="mobile-avatar"
+            onclick="showProfileModal()"
+          >
             ?
           </div>
         </div>
@@ -117,7 +125,11 @@
 
         <!-- Past Events toggle -->
         <label class="past-toggle-row" for="show-past-toggle">
-          <input type="checkbox" id="show-past-toggle" onchange="onPastToggle()" />
+          <input
+            type="checkbox"
+            id="show-past-toggle"
+            onchange="onPastToggle()"
+          />
           Show past &amp; expired events
         </label>
 
@@ -135,11 +147,19 @@
 
       <!-- ── Mobile Bottom Nav ──────────────────────────────────── -->
       <nav class="mobile-nav">
-        <button class="mobile-nav-item active" id="mnav-events" onclick="window.location.reload()">
+        <button
+          class="mobile-nav-item active"
+          id="mnav-events"
+          onclick="window.location.reload()"
+        >
           ${ICON.events}
           <span>Events</span>
         </button>
-        <button class="mobile-nav-item" id="mnav-profile" onclick="showProfileModal()">
+        <button
+          class="mobile-nav-item"
+          id="mnav-profile"
+          onclick="showProfileModal()"
+        >
           ${ICON.user}
           <span>Profile</span>
         </button>
@@ -270,13 +290,18 @@
       document.querySelector(".sidebar-footer .btn-ghost").innerHTML =
         ICON.logout + " Sign Out";
       document.querySelector("#sync-btn").innerHTML = ICON.sync + " Sync Now";
-      document.querySelector("#mobile-sync-btn").innerHTML = ICON.sync + " Sync";
+      document.querySelector("#mobile-sync-btn").innerHTML =
+        ICON.sync + " Sync";
       // Mobile nav icons
-      document.getElementById("mnav-events").innerHTML = ICON.events + "<span>Events</span>";
-      document.getElementById("mnav-profile").innerHTML = ICON.user + "<span>Profile</span>";
-      document.getElementById("mnav-admin").innerHTML = ICON.shield + "<span>Admin</span>";
-      document.querySelector(".mobile-nav .mobile-nav-item:last-child").innerHTML =
-        ICON.logout + "<span>Sign Out</span>";
+      document.getElementById("mnav-events").innerHTML =
+        ICON.events + "<span>Events</span>";
+      document.getElementById("mnav-profile").innerHTML =
+        ICON.user + "<span>Profile</span>";
+      document.getElementById("mnav-admin").innerHTML =
+        ICON.shield + "<span>Admin</span>";
+      document.querySelector(
+        ".mobile-nav .mobile-nav-item:last-child",
+      ).innerHTML = ICON.logout + "<span>Sign Out</span>";
 
       // ── State ─────────────────────────────────────────────────────────
       let payload = null;
@@ -298,7 +323,8 @@
         const username = payload.username || "?";
         document.getElementById("user-avatar").textContent = initials(username);
         document.getElementById("user-display-name").textContent = username;
-        document.getElementById("mobile-avatar").textContent = initials(username);
+        document.getElementById("mobile-avatar").textContent =
+          initials(username);
 
         if (payload.is_admin) {
           document.getElementById("admin-nav-link").classList.remove("hidden");
@@ -358,7 +384,7 @@
         const sinceMin = Math.floor((Date.now() - lastRefreshed) / 60000);
 
         const sinceStr = sinceMin < 1 ? "just now" : `${sinceMin} min ago`;
-        const nextStr  = minUntil <= 1 ? "< 1 min" : `${minUntil} min`;
+        const nextStr = minUntil <= 1 ? "< 1 min" : `${minUntil} min`;
 
         label.textContent = `Updated ${sinceStr} · Refreshing in ${nextStr}`;
       }
@@ -396,7 +422,9 @@
           });
 
           // Apply decay filter
-          const visible = events.filter(ev => shouldShowEvent(ev, showPastEvents));
+          const visible = events.filter((ev) =>
+            shouldShowEvent(ev, showPastEvents),
+          );
           const hiddenCount = events.length - visible.length;
 
           renderEvents(visible, hiddenCount);
@@ -427,15 +455,18 @@
         const container = document.getElementById("events-container");
 
         // Hint about hidden events when user hasn't toggled "show past"
-        const hiddenHint = (!showPastEvents && hiddenCount > 0)
-          ? `<div class="past-toggle-row" style="padding:0;font-size:0.76rem;color:var(--text-dim);margin-bottom:0.75rem">
-               ${ICON.timer} ${hiddenCount} past event${hiddenCount !== 1 ? 's' : ''} hidden —
+        const hiddenHint =
+          !showPastEvents && hiddenCount > 0
+            ? `<div class="past-toggle-row" style="padding:0 1rem;font-size:0.76rem;color:var(--text-dim);margin-bottom:0.75rem">
+               ${ICON.timer} ${hiddenCount} past event${hiddenCount !== 1 ? "s" : ""} hidden —
                <label style="color:var(--mint);cursor:pointer;text-decoration:underline;font-size:0.76rem" for="show-past-toggle">show them</label>
              </div>`
-          : '';
+            : "";
 
         if (!events.length) {
-          container.innerHTML = hiddenHint + `
+          container.innerHTML =
+            hiddenHint +
+            `
             <div class="empty-state">
               <div class="empty-state-title">No events found</div>
               <div class="empty-state-sub">Use "Sync Now" to discover new events from Spond.</div>
@@ -444,7 +475,9 @@
           return;
         }
 
-        container.innerHTML = hiddenHint + `<div class="events-list">${events.map(renderEventCard).join("")}</div>`;
+        container.innerHTML =
+          hiddenHint +
+          `<div class="events-list">${events.map(renderEventCard).join("")}</div>`;
       }
 
       function renderEventCard(ev) {
@@ -522,8 +555,14 @@
       async function triggerSync() {
         const btn = document.getElementById("sync-btn");
         const mBtn = document.getElementById("mobile-sync-btn");
-        if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> Syncing…`; }
-        if (mBtn) { mBtn.disabled = true; mBtn.innerHTML = `<span class="spinner"></span>`; }
+        if (btn) {
+          btn.disabled = true;
+          btn.innerHTML = `<span class="spinner"></span> Syncing…`;
+        }
+        if (mBtn) {
+          mBtn.disabled = true;
+          mBtn.innerHTML = `<span class="spinner"></span>`;
+        }
         try {
           const res = await api("/sync", "POST");
           if (!res.ok && res.status !== 403) throw new Error("Sync failed");
@@ -538,8 +577,14 @@
           showToast(err.message, "error");
         } finally {
           setTimeout(() => {
-            if (btn) { btn.disabled = false; btn.innerHTML = ICON.sync + " Sync Now"; }
-            if (mBtn) { mBtn.disabled = false; mBtn.innerHTML = ICON.sync + " Sync"; }
+            if (btn) {
+              btn.disabled = false;
+              btn.innerHTML = ICON.sync + " Sync Now";
+            }
+            if (mBtn) {
+              mBtn.disabled = false;
+              mBtn.innerHTML = ICON.sync + " Sync";
+            }
           }, 5000);
         }
       }
@@ -645,5 +690,3 @@
     </script>
   </body>
 </html>
-
-
