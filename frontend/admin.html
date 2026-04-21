@@ -5,36 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SpondBot — Admin</title>
     <meta name="description" content="SpondBot administration dashboard." />
-    <link rel="stylesheet" href="style.css?v=3" />
+    <link rel="stylesheet" href="style.css?v=4" />
     <style>
-      /* Admin-specific local overrides */
-      .page-content {
-        max-width: 1200px;
-      }
+      /* Admin-specific local overrides — only things style.css can't do */
       .admin-section {
         margin-bottom: 2rem;
       }
-      .filter-bar select,
-      .filter-bar input {
-        min-width: 130px;
+      .toggle-cell {
+        display: flex;
+        align-items: center;
       }
+      /* Error cell in table rows */
       .error-cell {
-        max-width: 200px;
+        max-width: 180px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
         font-size: 0.75rem;
         color: var(--status-red);
         cursor: help;
-      }
-      .page-content-full {
-        margin-left: var(--sidebar-width-icon);
-        flex: 1;
-        /* Responsive overrides handled by style.css media queries */
-      }
-      .toggle-cell {
-        display: flex;
-        align-items: center;
       }
     </style>
   </head>
@@ -456,7 +445,7 @@
 
     <div id="toast-container"></div>
 
-    <script src="app.js?v=3"></script>
+    <script src="app.js?v=4"></script>
     <script>
       // Fix template literals in static HTML
       document.querySelectorAll("[data-view]").forEach((el) => {
@@ -1024,3 +1013,4 @@
     </script>
   </body>
 </html>
+

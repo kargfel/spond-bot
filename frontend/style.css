@@ -54,6 +54,7 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden; /* prevent horizontal overflow on mobile */
 }
 a { color: inherit; text-decoration: none; }
 button { font-family: inherit; cursor: pointer; }
@@ -623,10 +624,7 @@ select.input {
 .filter-bar {
   display: flex;
   gap: 0.5rem;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  flex-wrap: wrap;           /* wrap on mobile so all filters visible */
   align-items: center;
   background: var(--bg-card);
   border: 1px solid var(--bg-card-border);
@@ -637,9 +635,8 @@ select.input {
   margin-bottom: 1rem;
   backdrop-filter: blur(20px);
 }
-.filter-bar::-webkit-scrollbar { display: none; }
-.filter-bar .input { min-width: 110px; flex-shrink: 0; }
-.filter-bar .search-input { min-width: 140px; }
+.filter-bar .input { min-width: 110px; flex: 1; min-width: 0; }
+.filter-bar .search-input { min-width: 140px; flex: 2; }
 
 /* ── Data Table — mobile card style by default ─────────────────────── */
 .table-container {
@@ -821,6 +818,7 @@ select.input {
     padding: 1.5rem;
     padding-bottom: 2rem;
     width: calc(100% - var(--sidebar-width-icon));
+    box-sizing: border-box;
   }
 
   /* Toast goes bottom right on tablet+ */
@@ -943,8 +941,11 @@ select.input {
     padding-bottom: 2rem;
     width: calc(100% - var(--sidebar-width));
     max-width: 100%;
+    box-sizing: border-box;
   }
 
+  /* Admin panel can use more width */
+  .page-content-full { max-width: 100%; }
   .page-content { max-width: calc(var(--sidebar-width) + 1000px); }
 
   .stats-bar { grid-template-columns: repeat(4, 1fr); }
