@@ -1108,6 +1108,84 @@ select.input {
   color: var(--text);
 }
 
+/* ── User Cards (admin Users view) ────────────────────────────────── */
+.user-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0 1rem;
+}
+.user-card {
+  background: var(--bg-card);
+  border: 1px solid var(--bg-card-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.875rem 1rem;
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.user-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+.user-card-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  letter-spacing: 0.03em;
+}
+.user-card-avatar.inactive {
+  background: var(--status-gray);
+  opacity: 0.6;
+}
+.user-card-body {
+  flex: 1;
+  min-width: 0;
+}
+.user-card-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+}
+.user-card-detail {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.user-card-detail.mono {
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+.user-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 /* ── Toggle Switch ─────────────────────────────────────────────────── */
 .toggle {
   position: relative;
@@ -1416,7 +1494,8 @@ select.input {
     overflow: visible;
     margin-bottom: 1.25rem;
   }
-  .events-list {
+  .events-list,
+  .user-cards-list {
     padding: 0;
   }
   .empty-state {

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SpondBot — Admin</title>
     <meta name="description" content="SpondBot administration dashboard." />
-    <link rel="stylesheet" href="style.css?v=5" />
+    <link rel="stylesheet" href="style.css?v=6" />
     <style>
       /* Admin-specific local overrides — only things style.css can't do */
       .admin-section {
@@ -192,43 +192,25 @@
               >Users who can log into this admin panel</span
             >
           </div>
-          <div class="table-container mb-3" id="frontend-users-table">
+          <div class="user-cards-list mb-3" id="frontend-users-table">
             <div class="flex-center" style="padding: 2rem">
-              <span
-                class="spinner"
-                style="width: 20px; height: 20px; border-width: 3px"
-              ></span>
+              <span class="spinner" style="width: 20px; height: 20px; border-width: 3px"></span>
             </div>
           </div>
 
-          <!-- Spond users table -->
-          <div
-            class="section-header mt-2"
-            style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-            "
-          >
+          <!-- Spond users section -->
+          <div class="section-header mt-2">
             <div>
               <span class="section-title">Spond Accounts</span>
-              <br /><span class="text-muted text-sm"
-                >Accounts managed by the bot</span
-              >
+              <br /><span class="text-muted text-sm">Accounts managed by the bot</span>
             </div>
-            <button
-              class="btn btn-outline btn-sm"
-              onclick="showAddSpondModal()"
-            >
+            <button class="btn btn-outline btn-sm" onclick="showAddSpondModal()">
               ${ICON.plus} Add Spond Account
             </button>
           </div>
-          <div class="table-container" id="spond-users-table">
+          <div class="user-cards-list" id="spond-users-table">
             <div class="flex-center" style="padding: 2rem">
-              <span
-                class="spinner"
-                style="width: 20px; height: 20px; border-width: 3px"
-              ></span>
+              <span class="spinner" style="width: 20px; height: 20px; border-width: 3px"></span>
             </div>
           </div>
         </div>
@@ -452,7 +434,7 @@
 
     <div id="toast-container"></div>
 
-    <script src="app.js?v=5"></script>
+    <script src="app.js?v=6"></script>
     <script>
       // Fix template literals in static HTML
       document.querySelectorAll("[data-view]").forEach((el) => {
@@ -746,28 +728,27 @@
             wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">No dashboard accounts</div></div>`;
             return;
           }
-          wrap.innerHTML = `
-        <table class="data-table">
-          <thead><tr><th>Username</th><th>Role</th><th>Linked Spond Account</th><th>Actions</th></tr></thead>
-          <tbody>
-            ${users
-              .map(
-                (u) => `
-              <tr>
-                <td>${escHtml(u.username)}</td>
-                <td>${u.is_admin ? '<span class="badge badge-accept">Admin</span>' : '<span class="badge badge-manual">User</span>'}</td>
-                <td style="color:var(--text-muted)">${u.linked_user_id ? allSpondUsers.find((s) => s.id === u.linked_user_id)?.display_name || u.linked_user_id.slice(0, 8) + "…" : "—"}</td>
-                <td>
-                  <div class="action-btns">
-                    <button class="btn btn-ghost btn-sm" onclick="openEditFrontendUser('${u.id}','${escHtml(u.username)}',${u.is_admin},'${u.linked_user_id || ""}')">Edit</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteFrontendUser('${u.id}','${escHtml(u.username)}')">Delete</button>
-                  </div>
-                </td>
-              </tr>`,
-              )
-              .join("")}
-          </tbody>
-        </table>`;
+          wrap.innerHTML = users.map((u) => {
+            const av = initials(u.username);
+            const linked = u.linked_user_id
+              ? allSpondUsers.find((s) => s.id === u.linked_user_id)?.display_name || u.linked_user_id.slice(0, 8) + '…'
+              : null;
+            return `
+            <div class="user-card">
+              <div class="user-card-avatar">${av}</div>
+              <div class="user-card-body">
+                <div class="user-card-name">${escHtml(u.username)}</div>
+                <div class="user-card-meta">
+                  ${u.is_admin ? '<span class="badge badge-accept">Admin</span>' : '<span class="badge badge-manual">User</span>'}
+                  ${linked ? `<span class="user-card-detail">${ICON.user} ${escHtml(linked)}</span>` : ''}
+                </div>
+              </div>
+              <div class="user-card-actions">
+                <button class="btn btn-ghost btn-sm" onclick="openEditFrontendUser('${u.id}','${escHtml(u.username)}',${u.is_admin},'${u.linked_user_id || ''}')">Edit</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteFrontendUser('${u.id}','${escHtml(u.username)}')">Del</button>
+              </div>
+            </div>`;
+          }).join('');
         } catch {
           wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">Failed to load</div></div>`;
         }
@@ -779,33 +760,28 @@
           wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">No Spond accounts registered</div></div>`;
           return;
         }
-        wrap.innerHTML = `
-      <table class="data-table">
-        <thead><tr><th>Name</th><th>Login</th><th>Active</th><th>Profile ID</th><th>Actions</th></tr></thead>
-        <tbody>
-          ${allSpondUsers
-            .map(
-              (u) => `
-            <tr>
-              <td>${escHtml(u.display_name)}</td>
-              <td style="color:var(--text-muted)">${escHtml(u.login)}</td>
-              <td>
-                <label class="toggle">
-                  <input type="checkbox" ${u.is_active ? "checked" : ""} onchange="toggleSpondUser('${u.id}', this.checked)">
-                  <span class="toggle-slider"></span>
-                </label>
-              </td>
-              <td style="color:var(--text-dim);font-size:0.72rem;font-family:monospace">${u.profile_id?.slice(0, 12) || "—"}…</td>
-              <td>
-                <div class="action-btns">
-                  <button class="btn btn-danger btn-sm" onclick="deleteSpondUser('${u.id}','${escHtml(u.display_name)}')">Delete</button>
-                </div>
-              </td>
-            </tr>`,
-            )
-            .join("")}
-        </tbody>
-      </table>`;
+        wrap.innerHTML = allSpondUsers.map((u) => {
+          const av = initials(u.display_name);
+          const profileId = u.profile_id ? u.profile_id.slice(0, 10) + '…' : '—';
+          return `
+          <div class="user-card">
+            <div class="user-card-avatar ${u.is_active ? '' : 'inactive'}">${av}</div>
+            <div class="user-card-body">
+              <div class="user-card-name">${escHtml(u.display_name)}</div>
+              <div class="user-card-meta">
+                <span class="user-card-detail">${ICON.user} ${escHtml(u.login)}</span>
+                <span class="user-card-detail mono">${profileId}</span>
+              </div>
+            </div>
+            <div class="user-card-actions">
+              <label class="toggle" title="${u.is_active ? 'Active' : 'Inactive'}">
+                <input type="checkbox" ${u.is_active ? 'checked' : ''} onchange="toggleSpondUser('${u.id}', this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
+              <button class="btn btn-danger btn-sm" onclick="deleteSpondUser('${u.id}','${escHtml(u.display_name)}')">Del</button>
+            </div>
+          </div>`;
+        }).join('');
       }
 
       async function toggleSpondUser(id, active) {
@@ -1048,5 +1024,6 @@
     </script>
   </body>
 </html>
+
 
 
