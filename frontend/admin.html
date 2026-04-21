@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SpondBot — Admin</title>
     <meta name="description" content="SpondBot administration dashboard." />
-    <link rel="stylesheet" href="style.css?v=4" />
+    <link rel="stylesheet" href="style.css?v=5" />
     <style>
       /* Admin-specific local overrides — only things style.css can't do */
       .admin-section {
@@ -159,12 +159,19 @@
             </button>
           </div>
 
-          <div class="table-container" id="events-table-wrap">
+          <!-- Decay toggle -->
+          <label class="past-toggle-row" for="admin-show-past">
+            <input type="checkbox" id="admin-show-past" onchange="filterLocally()" />
+            Show past &amp; expired events
+          </label>
+          <div class="refresh-bar" id="admin-decay-hint" style="display:none">
+            <span class="refresh-dot"></span>
+            <span id="admin-decay-count"></span>
+          </div>
+
+          <div class="events-list" id="events-table-wrap">
             <div class="flex-center" style="padding: 2.5rem">
-              <span
-                class="spinner"
-                style="width: 22px; height: 22px; border-width: 3px"
-              ></span>
+              <span class="spinner" style="width: 22px; height: 22px; border-width: 3px"></span>
             </div>
           </div>
         </div>
@@ -445,7 +452,7 @@
 
     <div id="toast-container"></div>
 
-    <script src="app.js?v=4"></script>
+    <script src="app.js?v=5"></script>
     <script>
       // Fix template literals in static HTML
       document.querySelectorAll("[data-view]").forEach((el) => {
@@ -606,54 +613,82 @@
       }
 
       function filterLocally() {
-        const q = (
-          document.getElementById("f-search")?.value || ""
-        ).toLowerCase();
-        const filtered = q
-          ? allEvents.filter((e) => (e.heading || "").toLowerCase().includes(q))
+        const q = (document.getElementById("f-search")?.value || "").toLowerCase();
+        const showPast = document.getElementById("admin-show-past")?.checked ?? false;
+
+        // Apply text search first
+        let filtered = q
+          ? allEvents.filter((e) => (e.heading || "").toLowerCase().includes(q) ||
+              getUserName(e.user_id).toLowerCase().includes(q))
           : allEvents;
-        renderEventsTable(filtered);
+
+        // Apply decay filter
+        const visible = filtered.filter((e) => shouldShowEvent(e, showPast));
+        const hiddenCount = filtered.length - visible.length;
+
+        // Show/hide decay hint
+        const hint = document.getElementById("admin-decay-hint");
+        const countEl = document.getElementById("admin-decay-count");
+        if (hiddenCount > 0 && !showPast) {
+          countEl.textContent = `${hiddenCount} past event${hiddenCount !== 1 ? 's' : ''} hidden — check the toggle above to show them`;
+          hint.style.display = "flex";
+        } else {
+          hint.style.display = "none";
+        }
+
+        renderAdminEventCards(visible);
       }
 
       function getUserName(userId) {
         const u = allSpondUsers.find((u) => u.id === userId);
-        return u ? u.display_name : userId?.slice(0, 8) + "…";
+        return u ? u.display_name : (userId?.slice(0, 8) + "…");
       }
 
-      function renderEventsTable(events) {
+      function renderAdminEventCards(events) {
         const wrap = document.getElementById("events-table-wrap");
         if (!events.length) {
-          wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">No events match your filters</div></div>`;
+          wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">No events match your filters</div><div class="empty-state-sub">Try adjusting the filters or enable "Show past &amp; expired events"</div></div>`;
           return;
         }
-        wrap.innerHTML = `
-      <table class="data-table">
-        <thead><tr>
-          <th>User</th><th>Event</th><th>Date</th>
-          <th>RSVP</th><th>Status</th><th>Error</th><th>Actions</th>
-        </tr></thead>
-        <tbody>
-          ${events
-            .map(
-              (ev) => `
-            <tr>
-              <td data-label="User" style="white-space:nowrap">${escHtml(getUserName(ev.user_id))}</td>
-              <td data-label="Event" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(ev.heading || "")}">${escHtml(ev.heading || "—")}</td>
-              <td data-label="Date" style="white-space:nowrap;color:var(--text-muted)">${fmtDateShort(ev.start_timestamp)}</td>
-              <td data-label="RSVP">${choiceBadge(ev.user_choice)}</td>
-              <td data-label="Status">${statusBadge(ev.status)}</td>
-              <td data-label="Error"><span class="error-cell" title="${escHtml(ev.error_message || "")}">${ev.error_message ? escHtml(ev.error_message) : "—"}</span></td>
-              <td>
-                <div class="action-btns">
-                  <button class="btn btn-ghost btn-sm" onclick="openEditEvent('${ev.id}','${escHtml(ev.heading || "")}','${ev.user_choice}')">Edit</button>
-                  ${ev.status === "failed" ? `<button class="btn btn-outline btn-sm" onclick="retryEvent('${ev.id}')">Retry</button>` : ""}
+        wrap.innerHTML = events.map((ev) => {
+          const statusCls = ev.status === 'processed' ? 'processed'
+            : ev.status === 'pending' ? 'pending'
+            : ev.status === 'failed' ? 'failed'
+            : 'processing';
+          const userName = escHtml(getUserName(ev.user_id));
+          const countdown = timeUntil(ev.start_timestamp);
+          const countdownHtml = countdown
+            ? `<span class="event-countdown ${countdown.cls}">${ICON.timer} ${countdown.label}</span>`
+            : '';
+          const errorHtml = ev.error_message
+            ? `<div class="event-error" title="${escHtml(ev.error_message)}">${escHtml(ev.error_message)}</div>`
+            : '';
+          return `
+            <div class="event-card">
+              <div class="event-card-bar ${statusCls}"></div>
+              <div class="event-card-body">
+                <div class="event-card-info">
+                  <div class="event-title">${escHtml(ev.heading || '—')}</div>
+                  <div class="event-meta">
+                    <span class="event-meta-item" style="color:var(--mint);font-weight:500">${userName}</span>
+                    <span class="event-meta-item">${ICON.calendar} ${fmtDate(ev.start_timestamp)}</span>
+                  </div>
+                  ${countdownHtml}
+                  ${errorHtml}
                 </div>
-              </td>
-            </tr>`,
-            )
-            .join("")}
-        </tbody>
-      </table>`;
+                <div class="event-card-actions">
+                  <div class="event-badges">
+                    ${choiceBadge(ev.user_choice)}
+                    ${statusBadge(ev.status)}
+                  </div>
+                  <div class="rsvp-buttons">
+                    <button class="btn btn-ghost btn-sm" onclick="openEditEvent('${ev.id}','${escHtml(ev.heading || '')}','${ev.user_choice}')">Edit</button>
+                    ${ev.status === 'failed' ? `<button class="btn btn-outline btn-sm" onclick="retryEvent('${ev.id}')">Retry</button>` : ''}
+                  </div>
+                </div>
+              </div>
+            </div>`;
+        }).join('');
       }
 
       // ── Edit Event Decision ────────────────────────────────────────────
@@ -1013,4 +1048,5 @@
     </script>
   </body>
 </html>
+
 
