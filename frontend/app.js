@@ -2,10 +2,13 @@
  * SpondBot Frontend — Shared API & Utility Layer
  *
  * Responsibilities:
- *  - api()       : authenticated fetch wrapper (cookie sent automatically by browser)
- *  - showToast() : non-intrusive status notifications
- *  - fmtDate()   : consistent date formatting
+ *  - api()             : authenticated fetch wrapper (cookie sent automatically by browser)
+ *  - showToast()       : non-intrusive status notifications
+ *  - fmtDate()         : consistent date formatting
+ *  - timeUntil()       : human-readable countdown ("in 2 days", "3 hrs ago")
+ *  - shouldShowEvent() : event decay filter (hides stale events)
  *  - badge helpers for status / choice rendering
+ *  - skeletonCards()   : skeleton loader HTML generator
  *
  * Authentication is handled via an HttpOnly session cookie set by the server.
  * The JWT is never accessible to JavaScript — cookies are sent automatically
@@ -103,6 +106,93 @@ function isOverdue(iso) {
   return new Date(iso) < new Date();
 }
 
+/**
+ * Returns a human-readable countdown string for an event start time.
+ * Examples: "in 2 days", "in 4 hrs", "starts soon", "yesterday", "3 days ago"
+ * @param {string} iso - ISO date string
+ * @returns {{ label: string, cls: string } | null}  null if no timestamp
+ */
+function timeUntil(iso) {
+  if (!iso) return null;
+  const now = new Date();
+  const target = new Date(iso);
+  const diffMs = target - now;
+  const diffMin = Math.round(diffMs / 60000);
+  const diffHrs = Math.round(diffMs / 3600000);
+  const diffDays = Math.round(diffMs / 86400000);
+
+  let label, cls;
+
+  if (diffMs > 0) {
+    // Future
+    if (diffMin < 60) {
+      label = diffMin <= 1 ? 'starts in < 1 min' : `in ${diffMin} min`;
+      cls = 'soon';
+    } else if (diffHrs < 24) {
+      label = `in ${diffHrs} hr${diffHrs !== 1 ? 's' : ''}`;
+      cls = diffHrs < 6 ? 'soon' : 'upcoming';
+    } else if (diffDays <= 2) {
+      label = diffDays === 1 ? 'tomorrow' : `in ${diffDays} days`;
+      cls = 'upcoming';
+    } else {
+      label = `in ${diffDays} days`;
+      cls = 'upcoming';
+    }
+  } else {
+    // Past
+    const absDays = Math.abs(diffDays);
+    const absHrs  = Math.abs(Math.round(diffHrs));
+    if (absHrs < 1) {
+      label = 'just started';
+      cls = 'past';
+    } else if (absHrs < 24) {
+      label = `${absHrs} hr${absHrs !== 1 ? 's' : ''} ago`;
+      cls = 'past';
+    } else if (absDays === 1) {
+      label = 'yesterday';
+      cls = 'past';
+    } else {
+      label = `${absDays} days ago`;
+      cls = 'past';
+    }
+  }
+
+  return { label, cls };
+}
+
+/* ── Event Decay Filter ────────────────────────────────────────────── */
+/**
+ * Determines whether an event should be visible in the UI.
+ *
+ * Rules:
+ *  1. Pending + event start has passed → hide (never auto-RSVPed, now irrelevant)
+ *  2. Processed or Failed + event was more than 7 days ago → hide (stale history)
+ *  3. Everything else → show
+ *
+ * @param {object}  ev       - Event object from the API
+ * @param {boolean} showPast - When true, bypass all decay rules (user toggled "show past")
+ * @returns {boolean} true if event should be displayed
+ */
+function shouldShowEvent(ev, showPast) {
+  if (showPast) return true;
+
+  const now = new Date();
+  const start = ev.start_timestamp ? new Date(ev.start_timestamp) : null;
+
+  // Rule 1: Pending + event already started → hide
+  if (ev.status === 'pending' && start && start < now) {
+    return false;
+  }
+
+  // Rule 2: Processed/Failed + event was more than 7 days ago → hide
+  const oneWeekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+  if (['processed', 'failed'].includes(ev.status) && start && start < oneWeekAgo) {
+    return false;
+  }
+
+  return true;
+}
+
 /* ── Badge HTML helpers ────────────────────────────────────────────── */
 function choiceBadge(choice) {
   const map = { accept: 'accept', decline: 'decline', manual: 'manual' };
@@ -120,6 +210,38 @@ function statusBadge(status) {
   return `<span class="badge badge-${cls}">${status}</span>`;
 }
 
+/* ── Skeleton Loader HTML ──────────────────────────────────────────── */
+/**
+ * Returns HTML string for N skeleton event card placeholders.
+ * @param {number} count
+ * @returns {string}
+ */
+function skeletonCards(count = 4) {
+  const card = `
+    <div class="skeleton-card">
+      <div class="skeleton-card-bar"></div>
+      <div class="skeleton-card-body">
+        <div class="skeleton-card-info">
+          <div class="skeleton skeleton-line title"></div>
+          <div class="skeleton skeleton-line meta1"></div>
+          <div class="skeleton skeleton-line meta2"></div>
+        </div>
+        <div class="skeleton-card-actions">
+          <div style="display:flex;gap:6px">
+            <div class="skeleton skeleton-badge"></div>
+            <div class="skeleton skeleton-badge"></div>
+          </div>
+          <div class="skeleton-btns">
+            <div class="skeleton skeleton-btn"></div>
+            <div class="skeleton skeleton-btn"></div>
+            <div class="skeleton skeleton-btn"></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  return `<div class="events-list">${card.repeat(count)}</div>`;
+}
+
 /* ── SVG icon snippets ─────────────────────────────────────────────── */
 const ICON = {
   calendar: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
@@ -133,6 +255,7 @@ const ICON = {
   overview: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`,
   plus:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
   trash:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"  stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>`,
+  timer:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><polyline points="12 9 12 13 14 15"/><path d="M9 2h6"/><path d="M12 2v3"/></svg>`,
 };
 
 /* ── Initials avatar helper ────────────────────────────────────────── */
