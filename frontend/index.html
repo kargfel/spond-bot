@@ -9,6 +9,17 @@
       content="Sign in to SpondBot, your automated Spond RSVP dashboard."
     />
     <link rel="stylesheet" href="style.css" />
+    <style>
+      /* Login page is already mobile-friendly via style.css;
+         this just ensures inputs have large enough tap targets on phones */
+      @media (max-width: 640px) {
+        .auth-page { padding: 1.5rem 1rem; }
+        .auth-bg-orb:nth-child(1) { width: 300px; height: 300px; }
+        .auth-bg-orb:nth-child(2) { width: 220px; height: 220px; }
+        .input { padding: 0.75rem 0.875rem; font-size: 1rem; } /* 1rem prevents iOS zoom */
+        .btn-primary { padding: 0.75rem 1.1rem; font-size: 1rem; }
+      }
+    </style>
   </head>
   <body>
     <div class="auth-page">

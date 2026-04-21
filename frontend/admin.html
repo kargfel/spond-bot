@@ -31,6 +31,7 @@
         margin-left: var(--sidebar-width);
         flex: 1;
         padding: 2rem 2.5rem;
+        padding-bottom: calc(var(--mobile-nav-height) + 1rem);
       }
       .toggle-cell {
         display: flex;
@@ -39,6 +40,15 @@
     </style>
   </head>
   <body>
+    <!-- ── Mobile Header (phones only) ─────────────────────────────── -->
+    <div class="mobile-header">
+      <div class="mobile-header-logo">Spond<span class="logo-dim">Bot</span> <span style="font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;background:rgba(64,138,113,0.2);color:var(--accent);border:1px solid var(--border);border-radius:4px;padding:1px 5px">Admin</span></div>
+      <div class="mobile-header-right">
+        <button class="btn btn-outline btn-sm" id="mobile-sync-btn" onclick="doSync()">${ICON.sync}</button>
+        <div class="mobile-header-avatar" id="mobile-admin-avatar">A</div>
+      </div>
+    </div>
+
     <div class="app-shell">
       <!-- ── Sidebar ─────────────────────────────────────────────── -->
       <aside class="sidebar">
@@ -229,6 +239,22 @@
         </div>
       </main>
     </div>
+
+    <!-- ── Mobile Bottom Nav ─────────────────────────────────────────── -->
+    <nav class="mobile-nav">
+      <button class="mobile-nav-item active" id="mnav-events" onclick="switchView('events', null); this.classList.add('active'); document.getElementById('mnav-users').classList.remove('active')">
+        ${ICON.events}<span>Events</span>
+      </button>
+      <button class="mobile-nav-item" id="mnav-users" onclick="switchView('users', null); this.classList.add('active'); document.getElementById('mnav-events').classList.remove('active')">
+        ${ICON.user}<span>Users</span>
+      </button>
+      <a class="mobile-nav-item" href="/dashboard">
+        ${ICON.overview}<span>Dashboard</span>
+      </a>
+      <button class="mobile-nav-item" onclick="signOut()">
+        ${ICON.logout}<span>Sign Out</span>
+      </button>
+    </nav>
 
     <!-- Edit Event Decision Modal -->
     <div class="modal-overlay hidden" id="edit-event-modal">
@@ -448,9 +474,16 @@
         .getElementById("edit-event-modal")
         .querySelector(".btn-outline")
         ?.remove();
-      // Render sidebar + button icons
-      document.querySelector('a[href="/dashboard"]').innerHTML =
+      // Render sidebar icons
+      document.querySelector('.sidebar-nav a[href="/dashboard"]').innerHTML =
         ICON.overview + " My Dashboard";
+      // Mobile nav icons
+      document.getElementById("mnav-events").innerHTML = ICON.events + "<span>Events</span>";
+      document.getElementById("mnav-users").innerHTML = ICON.user + "<span>Users</span>";
+      document.querySelector(".mobile-nav a[href='/dashboard']").innerHTML = ICON.overview + "<span>Dashboard</span>";
+      document.querySelector(".mobile-nav .mobile-nav-item:last-child").innerHTML = ICON.logout + "<span>Sign Out</span>";
+      // Sync button
+      document.getElementById("mobile-sync-btn").innerHTML = ICON.sync;
       setTimeout(() => {
         const sb = document.querySelector(".filter-bar .btn-outline");
         if (sb) sb.innerHTML = ICON.sync + " Trigger Sync";
@@ -475,6 +508,9 @@
         document.getElementById("admin-username").textContent =
           adminPayload.username;
         document.getElementById("admin-avatar").textContent = initials(
+          adminPayload.username,
+        );
+        document.getElementById("mobile-admin-avatar").textContent = initials(
           adminPayload.username,
         );
 
@@ -613,12 +649,12 @@
             .map(
               (ev) => `
             <tr>
-              <td style="white-space:nowrap">${escHtml(getUserName(ev.user_id))}</td>
-              <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(ev.heading || "")}">${escHtml(ev.heading || "—")}</td>
-              <td style="white-space:nowrap;color:var(--text-muted)">${fmtDateShort(ev.start_timestamp)}</td>
-              <td>${choiceBadge(ev.user_choice)}</td>
-              <td>${statusBadge(ev.status)}</td>
-              <td><span class="error-cell" title="${escHtml(ev.error_message || "")}">${ev.error_message ? escHtml(ev.error_message) : "—"}</span></td>
+              <td data-label="User" style="white-space:nowrap">${escHtml(getUserName(ev.user_id))}</td>
+              <td data-label="Event" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(ev.heading || "")}">${escHtml(ev.heading || "—")}</td>
+              <td data-label="Date" style="white-space:nowrap;color:var(--text-muted)">${fmtDateShort(ev.start_timestamp)}</td>
+              <td data-label="RSVP">${choiceBadge(ev.user_choice)}</td>
+              <td data-label="Status">${statusBadge(ev.status)}</td>
+              <td data-label="Error"><span class="error-cell" title="${escHtml(ev.error_message || "")}">${ev.error_message ? escHtml(ev.error_message) : "—"}</span></td>
               <td>
                 <div class="action-btns">
                   <button class="btn btn-ghost btn-sm" onclick="openEditEvent('${ev.id}','${escHtml(ev.heading || "")}','${ev.user_choice}')">Edit</button>

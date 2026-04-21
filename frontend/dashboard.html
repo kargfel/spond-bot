@@ -12,7 +12,22 @@
   </head>
   <body>
     <div class="app-shell">
-      <!-- ── Sidebar ─────────────────────────────────────────────── -->
+      <!-- ── Mobile Header (visible only on phones) ─────────────── -->
+      <div class="mobile-header">
+        <div class="mobile-header-logo">
+          Spond<span class="logo-dim">Bot</span>
+        </div>
+        <div class="mobile-header-right">
+          <button class="btn btn-outline btn-sm" id="mobile-sync-btn" onclick="triggerSync()">
+            ${ICON.sync} Sync
+          </button>
+          <div class="mobile-header-avatar" id="mobile-avatar" onclick="showProfileModal()">
+            ?
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Sidebar (tablet + desktop) ────────────────────────────── -->
       <aside class="sidebar">
         <div class="sidebar-logo">
           <span class="sidebar-logo-text">SpondBot</span>
@@ -100,16 +115,43 @@
           </button>
         </div>
 
+        <!-- Past Events toggle -->
+        <label class="past-toggle-row" for="show-past-toggle">
+          <input type="checkbox" id="show-past-toggle" onchange="onPastToggle()" />
+          Show past &amp; expired events
+        </label>
+
+        <!-- Refresh status bar -->
+        <div class="refresh-bar" id="refresh-bar">
+          <div class="refresh-dot"></div>
+          <span id="refresh-label">Loading…</span>
+        </div>
+
         <!-- Events list -->
         <div id="events-container">
-          <div class="flex-center" style="padding: 3rem 0">
-            <span
-              class="spinner"
-              style="width: 24px; height: 24px; border-width: 3px"
-            ></span>
-          </div>
+          <!-- skeleton cards shown while loading -->
         </div>
       </main>
+
+      <!-- ── Mobile Bottom Nav ──────────────────────────────────── -->
+      <nav class="mobile-nav">
+        <button class="mobile-nav-item active" id="mnav-events" onclick="window.location.reload()">
+          ${ICON.events}
+          <span>Events</span>
+        </button>
+        <button class="mobile-nav-item" id="mnav-profile" onclick="showProfileModal()">
+          ${ICON.user}
+          <span>Profile</span>
+        </button>
+        <a class="mobile-nav-item hidden" id="mnav-admin" href="/admin">
+          ${ICON.shield}
+          <span>Admin</span>
+        </a>
+        <button class="mobile-nav-item" onclick="signOut()">
+          ${ICON.logout}
+          <span>Sign Out</span>
+        </button>
+      </nav>
     </div>
 
     <!-- Profile Modal -->
@@ -228,30 +270,43 @@
       document.querySelector(".sidebar-footer .btn-ghost").innerHTML =
         ICON.logout + " Sign Out";
       document.querySelector("#sync-btn").innerHTML = ICON.sync + " Sync Now";
+      document.querySelector("#mobile-sync-btn").innerHTML = ICON.sync + " Sync";
+      // Mobile nav icons
+      document.getElementById("mnav-events").innerHTML = ICON.events + "<span>Events</span>";
+      document.getElementById("mnav-profile").innerHTML = ICON.user + "<span>Profile</span>";
+      document.getElementById("mnav-admin").innerHTML = ICON.shield + "<span>Admin</span>";
+      document.querySelector(".mobile-nav .mobile-nav-item:last-child").innerHTML =
+        ICON.logout + "<span>Sign Out</span>";
 
       // ── State ─────────────────────────────────────────────────────────
-      let payload = null; // populated by init() after requireAuth()
+      let payload = null;
       let statusFilter = "";
+      let showPastEvents = false;
       let spond_user = null;
+
+      // ── Auto-refresh state ─────────────────────────────────────────────
+      const REFRESH_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+      let lastRefreshed = null;
+      let nextRefreshAt = null;
+      let refreshTimer = null;
+      let countdownTimer = null;
 
       // ── Init ───────────────────────────────────────────────────────────
       async function init() {
-        // requireAuth() calls /auth/me and redirects to login if unauthenticated
         payload = await requireAuth();
 
-        // Populate sidebar user info from server-returned claims
         const username = payload.username || "?";
         document.getElementById("user-avatar").textContent = initials(username);
         document.getElementById("user-display-name").textContent = username;
+        document.getElementById("mobile-avatar").textContent = initials(username);
 
-        // Show admin panel link if the user is an admin
         if (payload.is_admin) {
           document.getElementById("admin-nav-link").classList.remove("hidden");
+          document.getElementById("mnav-admin").classList.remove("hidden");
           document.querySelector(".sidebar-role").textContent = "Administrator";
           document.querySelector(".sidebar-role").style.color = "var(--mint)";
         }
 
-        // If user has a linked Spond account, fetch display_name from it
         if (payload.linked_user_id) {
           try {
             const res = await api(`/users/${payload.linked_user_id}`);
@@ -259,6 +314,9 @@
               spond_user = await res.json();
               document.getElementById("user-display-name").textContent =
                 spond_user.display_name;
+              document.getElementById("mobile-avatar").textContent = initials(
+                spond_user.display_name,
+              );
               document.getElementById("user-avatar").textContent = initials(
                 spond_user.display_name,
               );
@@ -266,13 +324,53 @@
           } catch {}
         }
 
-        loadEvents();
+        await loadEvents();
+        startAutoRefresh();
+      }
+
+      // ── Auto-refresh Logic ─────────────────────────────────────────────
+      function startAutoRefresh() {
+        clearInterval(refreshTimer);
+        clearInterval(countdownTimer);
+
+        nextRefreshAt = new Date(Date.now() + REFRESH_INTERVAL_MS);
+
+        refreshTimer = setInterval(async () => {
+          await loadEvents(true /* silent */);
+          nextRefreshAt = new Date(Date.now() + REFRESH_INTERVAL_MS);
+        }, REFRESH_INTERVAL_MS);
+
+        // Update the countdown label every 30 seconds
+        countdownTimer = setInterval(updateRefreshLabel, 30000);
+      }
+
+      function updateRefreshLabel() {
+        const label = document.getElementById("refresh-label");
+        if (!label) return;
+
+        if (!lastRefreshed) {
+          label.textContent = "Loading…";
+          return;
+        }
+
+        const msUntil = nextRefreshAt - Date.now();
+        const minUntil = Math.ceil(msUntil / 60000);
+        const sinceMin = Math.floor((Date.now() - lastRefreshed) / 60000);
+
+        const sinceStr = sinceMin < 1 ? "just now" : `${sinceMin} min ago`;
+        const nextStr  = minUntil <= 1 ? "< 1 min" : `${minUntil} min`;
+
+        label.textContent = `Updated ${sinceStr} · Refreshing in ${nextStr}`;
       }
 
       // ── Load Events ────────────────────────────────────────────────────
-      async function loadEvents() {
+      async function loadEvents(silent = false) {
         const container = document.getElementById("events-container");
-        container.innerHTML = `<div class="flex-center" style="padding:3rem 0"><span class="spinner" style="width:24px;height:24px;border-width:3px;"></span></div>`;
+
+        if (!silent) {
+          // Show skeleton loaders instead of a spinner
+          container.innerHTML = skeletonCards(4);
+        }
 
         let url = "/events";
         if (statusFilter) url += `?status=${statusFilter}`;
@@ -286,7 +384,7 @@
           if (!res.ok) throw new Error("Failed to load events");
           let events = await res.json();
 
-          // Sort by the Date the Event happens (start_timestamp), not by status
+          // Sort by start_timestamp ascending (upcoming first)
           events = events.sort((a, b) => {
             const timeA = a.start_timestamp
               ? new Date(a.start_timestamp).getTime()
@@ -297,10 +395,22 @@
             return timeA - timeB;
           });
 
-          renderEvents(events);
+          // Apply decay filter
+          const visible = events.filter(ev => shouldShowEvent(ev, showPastEvents));
+          const hiddenCount = events.length - visible.length;
+
+          renderEvents(visible, hiddenCount);
+
+          lastRefreshed = Date.now();
+          updateRefreshLabel();
         } catch (err) {
           container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Could not load events</div><div class="empty-state-sub">${err.message}</div></div>`;
         }
+      }
+
+      function onPastToggle() {
+        showPastEvents = document.getElementById("show-past-toggle").checked;
+        loadEvents();
       }
 
       function setFilter(el, status) {
@@ -313,33 +423,47 @@
       }
 
       // ── Render Events ──────────────────────────────────────────────────
-      function renderEvents(events) {
+      function renderEvents(events, hiddenCount) {
         const container = document.getElementById("events-container");
+
+        // Hint about hidden events when user hasn't toggled "show past"
+        const hiddenHint = (!showPastEvents && hiddenCount > 0)
+          ? `<div class="past-toggle-row" style="padding:0;font-size:0.76rem;color:var(--text-dim);margin-bottom:0.75rem">
+               ${ICON.timer} ${hiddenCount} past event${hiddenCount !== 1 ? 's' : ''} hidden —
+               <label style="color:var(--mint);cursor:pointer;text-decoration:underline;font-size:0.76rem" for="show-past-toggle">show them</label>
+             </div>`
+          : '';
+
         if (!events.length) {
-          container.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-title">No events found</div>
-          <div class="empty-state-sub">Use "Sync Now" to discover new events from Spond.</div>
-          <button class="btn btn-outline" onclick="triggerSync()">Sync Now</button>
-        </div>`;
+          container.innerHTML = hiddenHint + `
+            <div class="empty-state">
+              <div class="empty-state-title">No events found</div>
+              <div class="empty-state-sub">Use "Sync Now" to discover new events from Spond.</div>
+              <button class="btn btn-outline" onclick="triggerSync()">Sync Now</button>
+            </div>`;
           return;
         }
 
-        container.innerHTML = `<div class="events-list">${events.map(renderEventCard).join("")}</div>`;
+        container.innerHTML = hiddenHint + `<div class="events-list">${events.map(renderEventCard).join("")}</div>`;
       }
 
       function renderEventCard(ev) {
         const isProcessed = ev.status === "processed";
-        // invite_time = when Spond locks the RSVP window (the real "respond by" deadline).
-        // rsvp_date   = event registration close date — a different concept, shown as fallback.
         const deadlineTs = ev.invite_time || ev.rsvp_date;
         let deadlineMeta = "";
         if (isProcessed && deadlineTs) {
-          // For completed events: neutral confirmation stamp, no red, no "RSVP by"
           deadlineMeta = `<span class="event-meta-item" style="color:var(--mint)">${ICON.clock} RSVPed before ${fmtDate(deadlineTs)}</span>`;
         } else if (deadlineTs) {
           deadlineMeta = `<span class="event-meta-item" style="${isOverdue(deadlineTs) ? "color:var(--status-red)" : ""}"><span title="${ev.invite_time ? "RSVP deadline (inviteTime)" : "Registration deadline (rsvpDate)"}">${ICON.clock} RSVP by ${fmtDate(deadlineTs)}</span></span>`;
         }
+
+        // Countdown badge
+        let countdownHtml = "";
+        const cd = timeUntil(ev.start_timestamp);
+        if (cd && ev.status !== "processed") {
+          countdownHtml = `<div class="event-countdown ${cd.cls}">${ICON.timer} ${cd.label}</div>`;
+        }
+
         const errorHtml = ev.error_message
           ? `<div class="event-error">${ev.error_message}</div>`
           : "";
@@ -354,6 +478,7 @@
               ${ev.start_timestamp ? `<span class="event-meta-item">${ICON.calendar} ${fmtDate(ev.start_timestamp)}</span>` : ""}
               ${deadlineMeta}
             </div>
+            ${countdownHtml}
             ${errorHtml}
           </div>
           <div class="event-card-actions">
@@ -383,7 +508,6 @@
           if (!res.ok)
             throw new Error((await res.json()).detail || "Update failed");
           const updated = await res.json();
-          // Optimistic update of the card
           const card = document.getElementById(`card-${eventId}`);
           if (card) {
             card.outerHTML = renderEventCard(updated);
@@ -397,8 +521,9 @@
       // ── Sync ───────────────────────────────────────────────────────────
       async function triggerSync() {
         const btn = document.getElementById("sync-btn");
-        btn.disabled = true;
-        btn.innerHTML = `<span class="spinner"></span> Syncing…`;
+        const mBtn = document.getElementById("mobile-sync-btn");
+        if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> Syncing…`; }
+        if (mBtn) { mBtn.disabled = true; mBtn.innerHTML = `<span class="spinner"></span>`; }
         try {
           const res = await api("/sync", "POST");
           if (!res.ok && res.status !== 403) throw new Error("Sync failed");
@@ -408,13 +533,13 @@
               : "Discovery sync triggered — events will update shortly.",
             res.status === 403 ? "info" : "success",
           );
-          setTimeout(loadEvents, 4000);
+          setTimeout(() => loadEvents(true), 4000);
         } catch (err) {
           showToast(err.message, "error");
         } finally {
           setTimeout(() => {
-            btn.disabled = false;
-            btn.innerHTML = ICON.sync + " Sync Now";
+            if (btn) { btn.disabled = false; btn.innerHTML = ICON.sync + " Sync Now"; }
+            if (mBtn) { mBtn.disabled = false; mBtn.innerHTML = ICON.sync + " Sync"; }
           }, 5000);
         }
       }
@@ -451,6 +576,9 @@
           document.getElementById("user-display-name").textContent =
             spond_user.display_name;
           document.getElementById("user-avatar").textContent = initials(
+            spond_user.display_name,
+          );
+          document.getElementById("mobile-avatar").textContent = initials(
             spond_user.display_name,
           );
           closeProfileModal();
