@@ -12,7 +12,13 @@ apscheduler>=3.10.0
 
 # Security
 cryptography>=42.0.0
+# SECURITY WARNING: python-jose is unmaintained and has a known algorithm confusion
+# vulnerability (CVE-2024-33663). Migrate to authlib>=1.3.0 or joserfc>=0.12.0.
+# See PR description for migration steps.
 python-jose[cryptography]>=3.3.0
+# WARNING: passlib has not been updated since 2020 and is effectively unmaintained.
+# The <4.0.0 cap on bcrypt is required for passlib compatibility (bcrypt 4.x broke
+# passlib's internal API). Consider migrating to direct bcrypt 4.x usage or argon2-cffi.
 passlib>=1.7.4
 bcrypt>=3.2.0,<4.0.0
 python-multipart>=0.0.9
