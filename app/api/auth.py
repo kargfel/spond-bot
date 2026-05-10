@@ -11,8 +11,8 @@ DELETE /auth/users/{id}         Delete a frontend user (admin only)
 import logging
 import uuid
 
+import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from passlib.context import CryptContext
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
@@ -33,7 +33,6 @@ from app.schemas.auth import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _limiter = Limiter(key_func=get_remote_address)
 
 # Cookie name and settings
@@ -48,11 +47,11 @@ _IS_SECURE = settings.site_domain != "localhost"
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd.verify(plain[:72], hashed)
+    return bcrypt.checkpw(plain[:72].encode("utf-8"), hashed.encode("utf-8"))
 
 
 def hash_password(plain: str) -> str:
-    return _pwd.hash(plain[:72])
+    return bcrypt.hashpw(plain[:72].encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 # ---------------------------------------------------------------------------

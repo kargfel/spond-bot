@@ -12,10 +12,10 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import bcrypt
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from passlib.context import CryptContext
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -32,8 +32,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Resolved path to the frontend directory — used for sandboxed file serving
 _FRONTEND_DIR = Path("frontend").resolve()
@@ -58,7 +56,7 @@ async def _seed_admin() -> None:
         admin = FrontendUser(
             id=uuid.uuid4(),
             username=settings.admin_username,
-            hashed_password=_pwd.hash(settings.admin_password[:72]),
+            hashed_password=bcrypt.hashpw(settings.admin_password[:72].encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
             is_admin=True,
             linked_user_id=None,
         )
