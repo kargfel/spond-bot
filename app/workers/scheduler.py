@@ -55,3 +55,30 @@ def shutdown_scheduler() -> None:
 
 def get_scheduler() -> AsyncIOScheduler:
     return _scheduler
+
+
+async def reschedule_pending_snipers() -> None:
+    """Re-schedule sniper jobs on startup (in-memory jobs are lost on restart)."""
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from app.database import AsyncSessionLocal
+    from app.models.event import CHOICE_ACCEPT, STATUS_PENDING, Event
+    from app.workers.executioner import schedule_sniper
+
+    now = datetime.now(timezone.utc)
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Event).where(
+                Event.invite_time > now,
+                Event.status == STATUS_PENDING,
+                Event.user_choice.in_([CHOICE_ACCEPT, "decline"]),
+            )
+        )
+        events = result.scalars().all()
+
+    for event in events:
+        schedule_sniper(_scheduler, event)
+    if events:
+        logger.info("Sniper: rescheduled %d job(s) on startup.", len(events))

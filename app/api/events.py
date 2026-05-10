@@ -19,8 +19,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminDep, CurrentUser, DbDep
-from app.models.event import CHOICE_MANUAL, STATUS_PENDING, Event
+from app.models.event import CHOICE_ACCEPT, CHOICE_MANUAL, STATUS_PENDING, Event
 from app.schemas.event import EventDecisionUpdate, EventResponse
+from app.workers.executioner import cancel_sniper, schedule_sniper
+from app.workers.scheduler import get_scheduler
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Events"])
@@ -129,6 +131,13 @@ async def set_decision(
 
     await db.commit()
     await db.refresh(event)
+
+    scheduler = get_scheduler()
+    if event.user_choice in (CHOICE_ACCEPT, "decline") and event.status == STATUS_PENDING:
+        schedule_sniper(scheduler, event)
+    else:
+        cancel_sniper(scheduler, event.id)
+
     logger.info(
         "Decision set to %r for event %s (%r) by %r",
         payload.user_choice,

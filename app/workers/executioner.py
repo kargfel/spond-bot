@@ -9,12 +9,20 @@ Finds all events where:
 For each match, submits the RSVP to Spond concurrently using asyncio.gather.
 On 401, forces a token refresh and retries once. On other failures, marks
 the event as 'failed' with an error_message for visibility.
+
+Sniper jobs (schedule_sniper / cancel_sniper / run_sniper) supplement the
+interval-based executioner by scheduling one-shot DateTrigger jobs that fire
+at exactly invite_time, providing millisecond-precision RSVP timing.
 """
 import asyncio
+import contextlib
 import logging
+import uuid as _uuid
 from datetime import datetime, timezone
 
 import aiohttp
+from apscheduler.jobstores.base import JobLookupError
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -180,4 +188,45 @@ async def _submit_rsvp(
 
         # 3. Submit the RSVP
         await spond_client.rsvp(http, token, spond_event_id, recipient_id, accepted)
+
+
+# ---------------------------------------------------------------------------
+# Sniper helpers — per-event DateTrigger jobs for millisecond-precision RSVPs
+# ---------------------------------------------------------------------------
+
+def _sniper_job_id(event_id: _uuid.UUID) -> str:
+    return f"sniper_{event_id}"
+
+
+def schedule_sniper(scheduler: AsyncIOScheduler, event: Event) -> None:
+    """Schedule (or replace) a one-shot RSVP job at event.invite_time."""
+    now = datetime.now(timezone.utc)
+    if not event.invite_time or event.invite_time <= now:
+        return
+    job_id = _sniper_job_id(event.id)
+    with contextlib.suppress(JobLookupError):
+        scheduler.remove_job(job_id)
+    scheduler.add_job(
+        run_sniper,
+        trigger="date",
+        run_date=event.invite_time,
+        id=job_id,
+        args=[event.id],
+        misfire_grace_time=30,
+    )
+    logger.debug("Sniper scheduled for event %s at %s", event.id, event.invite_time)
+
+
+def cancel_sniper(scheduler: AsyncIOScheduler, event_id: _uuid.UUID) -> None:
+    """Cancel a pending sniper job if it exists."""
+    with contextlib.suppress(JobLookupError):
+        scheduler.remove_job(_sniper_job_id(event_id))
+
+
+async def run_sniper(event_id: _uuid.UUID) -> None:
+    """One-shot job called by APScheduler at invite_time."""
+    async with AsyncSessionLocal() as db:
+        event = await db.get(Event, event_id)
+    if event:
+        await _process_event(event)
 

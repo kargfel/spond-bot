@@ -25,7 +25,7 @@ from app.api import auth as auth_router
 from app.api import events as events_router
 from app.api import users as users_router
 from app.config import settings
-from app.workers.scheduler import shutdown_scheduler, start_scheduler
+from app.workers.scheduler import reschedule_pending_snipers, shutdown_scheduler, start_scheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -74,6 +74,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Spond Multi-User Bot...")
     await _seed_admin()
     start_scheduler()
+    await reschedule_pending_snipers()
     yield
     logger.info("Shutting down...")
     shutdown_scheduler()

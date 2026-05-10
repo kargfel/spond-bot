@@ -20,9 +20,11 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.core import spond_client
 from app.core.spond_client import SpondAuthError, parse_event_timestamps
 from app.database import AsyncSessionLocal
-from app.models.event import CHOICE_MANUAL, STATUS_PENDING, Event
+from app.models.event import CHOICE_ACCEPT, CHOICE_MANUAL, STATUS_PENDING, Event
 from app.models.user import User
 from app.services.auth import ensure_fresh_token
+from app.workers.executioner import schedule_sniper
+from app.workers.scheduler import get_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -166,3 +168,17 @@ async def _sync_user(user: User) -> None:
             new_count,
             len(bulk),
         )
+
+        # Re-schedule snipers for events with a live decision and future invite_time.
+        # Handles both pre-existing decisions and updated invite_times (postponed events).
+        now = datetime.now(timezone.utc)
+        result = await db.execute(
+            select(Event).where(
+                Event.user_id == db_user.id,
+                Event.invite_time > now,
+                Event.status == STATUS_PENDING,
+                Event.user_choice.in_([CHOICE_ACCEPT, "decline"]),
+            )
+        )
+        for event in result.scalars().all():
+            schedule_sniper(get_scheduler(), event)
