@@ -37,10 +37,36 @@ from app.models.event import (
     STATUS_PROCESSING,
     Event,
 )
+from app.models.rsvp_log import OUTCOME_FAILED, OUTCOME_RETRY_SUCCESS, OUTCOME_SUCCESS, RsvpLog
 from app.models.user import User
 from app.services.auth import ensure_fresh_token
 
 logger = logging.getLogger(__name__)
+
+
+async def _write_rsvp_log(
+    db: AsyncSession,
+    event: Event,
+    user: User | None,
+    fired_at: datetime,
+    submitted_at: datetime | None,
+    outcome: str,
+    retry_count: int,
+    error_detail: str | None = None,
+) -> None:
+    """Append an immutable audit row for this RSVP attempt. Caller must commit."""
+    log = RsvpLog(
+        event_id=event.id,
+        user_id=user.id if user else None,
+        spond_event_id=event.spond_event_id,
+        choice=event.user_choice,
+        fired_at=fired_at,
+        submitted_at=submitted_at,
+        outcome=outcome,
+        retry_count=retry_count,
+        error_detail=error_detail,
+    )
+    db.add(log)
 
 
 async def run_executioner() -> None:
