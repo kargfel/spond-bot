@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import (
 from app.database import Base, get_db
 from app.api import deps
 import app.models.rsvp_log  # noqa: F401 — ensures rsvp_log table is registered in Base.metadata
+import app.models.user  # noqa: F401
+import app.models.event  # noqa: F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
