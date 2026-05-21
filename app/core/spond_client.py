@@ -157,6 +157,18 @@ async def resolve_recipient_id(
         logger.warning("Group %s not found in user's groups — using profile_id.", group_id)
         return profile_id
 
+    # Primary: match by profile.id — always present, unambiguous
+    for member in event_group.get("members", []):
+        if (member.get("profile") or {}).get("id") == profile_id:
+            m_id = member.get("id")
+            if m_id:
+                logger.debug(
+                    "Resolved recipient_id=%s by profile.id=%s in group=%s",
+                    m_id, profile_id, group_id,
+                )
+                return m_id
+
+    # Secondary: match by login email/phone (Spond sometimes omits profile.id)
     target = user_login.strip().lower()
     for member in event_group.get("members", []):
         member_email   = (member.get("email") or "").strip().lower()
@@ -174,8 +186,8 @@ async def resolve_recipient_id(
                 return m_id
 
     logger.warning(
-        "No member match in group %s for login=%r — falling back to profile_id.",
-        group_id, user_login,
+        "No member match in group %s for profile_id=%s login=%r — falling back to profile_id.",
+        group_id, profile_id, user_login,
     )
     return profile_id
 

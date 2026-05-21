@@ -17,3 +17,10 @@ login
 # Debug & temp files generated during development
 _debug/
 
+# Memory compiler (separate git repo - not a submodule)
+claude-memory-compiler/
+
+# Editor / tool config
+.claude/
+.obsidian/
+
