@@ -251,8 +251,8 @@
         <div id="view-rsvp-log" class="admin-section hidden">
           <div class="page-header" style="margin-bottom: 1rem">
             <h1 class="page-title">RSVP Audit Log</h1>
-            <button class="btn btn-outline btn-sm" onclick="loadRsvpLog()">
-              ${ICON.sync} Refresh
+            <button id="rl-refresh-btn" class="btn btn-outline btn-sm" onclick="loadRsvpLog()">
+              Refresh
             </button>
           </div>
           <div class="filter-bar mb-2">
@@ -522,6 +522,8 @@
       setTimeout(() => {
         const sb = document.querySelector(".filter-bar .btn-outline");
         if (sb) sb.innerHTML = ICON.sync + " Trigger Sync";
+        const rlRefreshBtn = document.getElementById("rl-refresh-btn");
+        if (rlRefreshBtn) rlRefreshBtn.innerHTML = ICON.sync + " Refresh";
         const ab = document.querySelector("#view-users .btn-primary");
         if (ab) ab.innerHTML = ICON.plus + " Add User";
         const sasb = document.querySelector("#view-users .btn-outline");
@@ -569,7 +571,7 @@
       // ── Stats (from /admin/stats) ──────────────────────────────────────
       async function loadStats() {
         try {
-          const res = await api('/api/v1/admin/stats');
+          const res = await api('/admin/stats');
           if (!res.ok) return;
           const d = await res.json();
 
@@ -1101,7 +1103,7 @@
         const userId = document.getElementById('rl-user')?.value || '';
         const outcome = document.getElementById('rl-outcome')?.value || '';
 
-        let url = '/api/v1/admin/rsvp-log?limit=200';
+        let url = '/admin/rsvp-log?limit=200';
         if (userId) url += `&user_id=${userId}`;
 
         try {
