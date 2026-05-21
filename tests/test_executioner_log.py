@@ -59,3 +59,8 @@ async def test_write_rsvp_log_none_user():
     log_row = mock_db.add.call_args[0][0]
     assert log_row.user_id is None
     assert log_row.error_detail == "User not found"
+
+
+def test_lead_time_ms_default_zero():
+    from app.config import settings
+    assert settings.rsvp_lead_time_ms == 0
