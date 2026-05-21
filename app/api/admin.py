@@ -115,4 +115,7 @@ async def get_admin_stats(db: AsyncSession = DbDep):
         events_failed=events_failed,
         last_discovery_at=last_discovery_at,
         recent_failures=recent_failures,
+        rsvp_p50_ms=None,
+        rsvp_p95_ms=None,
+        rsvp_sample_count=0,
     )
