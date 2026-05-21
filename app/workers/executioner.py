@@ -81,7 +81,7 @@ async def run_executioner() -> None:
             .where(
                 Event.invite_time <= now,
                 Event.status == STATUS_PENDING,
-                Event.user_choice.in_([CHOICE_ACCEPT, "decline"]),
+                Event.user_choice.in_([CHOICE_ACCEPT, CHOICE_DECLINE]),
                 User.is_active == True,  # noqa: E712
             )
         )
@@ -140,7 +140,6 @@ async def _process_event(event: Event) -> None:
                 user,
                 db_event.spond_event_id,
                 accepted,
-                resolved_recipient_id=db_event.resolved_recipient_id,
             )
             db_event.status = STATUS_PROCESSED
             db_event.error_message = None
@@ -223,7 +222,6 @@ async def _submit_rsvp(
     accepted: bool,
     *,
     force_refresh: bool = False,
-    **kwargs,  # reserved for resolved_recipient_id (Task 4)
 ) -> datetime:
     """Obtain a fresh token, resolve recipient ID, fire the RSVP. Returns submitted_at."""
     token = await ensure_fresh_token(db, user, force=force_refresh)
