@@ -139,3 +139,30 @@ def test_cancel_warmup_removes_job():
     event_id = uuid.uuid4()
     from app.workers.executioner import cancel_warmup
     cancel_warmup(scheduler, event_id)  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_submit_rsvp_force_refresh_bypasses_cache():
+    """_submit_rsvp with force_refresh=True must bypass cache and fetch from API."""
+    mock_db = AsyncMock()
+    mock_user = MagicMock()
+    mock_user.display_name = "RefreshUser"
+    mock_user.profile_id = "PROF111"
+    mock_user.login = "refresh@example.com"
+
+    with patch("app.workers.executioner.ensure_fresh_token",
+               new_callable=AsyncMock, return_value="tok"), \
+         patch("app.workers.executioner.spond_client.get_bulk_events",
+               new_callable=AsyncMock, return_value=[{"id": "EVT-R-001"}]) as mock_bulk, \
+         patch("app.workers.executioner.spond_client.resolve_recipient_id",
+               new_callable=AsyncMock, return_value="RECIP-R") as mock_resolve, \
+         patch("app.workers.executioner.spond_client.rsvp", new_callable=AsyncMock):
+        from app.workers.executioner import _submit_rsvp
+        await _submit_rsvp(
+            mock_db, mock_user, "EVT-R-001", True,
+            force_refresh=True,
+            resolved_recipient_id="SHOULD-BE-BYPASSED",
+        )
+
+    mock_bulk.assert_called_once()
+    mock_resolve.assert_called_once()
