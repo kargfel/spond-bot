@@ -8,6 +8,9 @@ def test_admin_stats_schema_importable():
         events_failed=5,
         last_discovery_at=None,
         recent_failures=[],
+        rsvp_p50_ms=None,
+        rsvp_p95_ms=None,
+        rsvp_sample_count=0,
     )
     assert obj.active_users == 3
     assert obj.events_failed == 5
@@ -32,6 +35,28 @@ def test_admin_stats_recent_failure_schema():
         events_failed=1,
         last_discovery_at=None,
         recent_failures=[failure],
+        rsvp_p50_ms=None,
+        rsvp_p95_ms=None,
+        rsvp_sample_count=0,
     )
     assert len(obj.recent_failures) == 1
     assert obj.recent_failures[0].user_display_name == "Alice"
+
+def test_admin_stats_has_timing_fields():
+    from app.schemas.stats import AdminStatsResponse
+    import uuid
+    obj = AdminStatsResponse(
+        active_users=1,
+        total_events=1,
+        events_pending=0,
+        events_processed=1,
+        events_failed=0,
+        last_discovery_at=None,
+        recent_failures=[],
+        rsvp_p50_ms=120,
+        rsvp_p95_ms=450,
+        rsvp_sample_count=10,
+    )
+    assert obj.rsvp_p50_ms == 120
+    assert obj.rsvp_p95_ms == 450
+    assert obj.rsvp_sample_count == 10

@@ -22,3 +22,7 @@ class AdminStatsResponse(BaseModel):
     events_failed: int
     last_discovery_at: datetime | None
     recent_failures: list[RecentFailure]
+    # Timing metrics over last 200 RSVP submissions (None if no data)
+    rsvp_p50_ms: int | None
+    rsvp_p95_ms: int | None
+    rsvp_sample_count: int
