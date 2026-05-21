@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 import aiohttp
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import spond_client
@@ -31,6 +31,7 @@ from app.core.spond_client import SpondAPIError, SpondAuthError
 from app.database import AsyncSessionLocal
 from app.models.event import (
     CHOICE_ACCEPT,
+    CHOICE_DECLINE,
     STATUS_FAILED,
     STATUS_PENDING,
     STATUS_PROCESSED,
@@ -103,8 +104,17 @@ async def _process_event(event: Event) -> None:
     fired_at = datetime.now(timezone.utc)
 
     async with AsyncSessionLocal() as db:
+        # Atomically claim the event — only the caller that claims rowcount=1 proceeds.
+        result = await db.execute(
+            update(Event)
+            .where(Event.id == event.id, Event.status == STATUS_PENDING)
+            .values(status=STATUS_PROCESSING, updated_at=datetime.now(timezone.utc))
+        )
+        if result.rowcount == 0:
+            return  # already claimed or processed by another worker / sniper
+
         db_event = await db.get(Event, event.id)
-        if not db_event or db_event.status != STATUS_PENDING:
+        if not db_event:
             return
 
         user = await db.get(User, db_event.user_id)
@@ -122,13 +132,16 @@ async def _process_event(event: Event) -> None:
             await db.commit()
             return
 
-        db_event.status = STATUS_PROCESSING
-        await db.commit()
-
         accepted = db_event.user_choice == CHOICE_ACCEPT
 
         try:
-            submitted_at = await _submit_rsvp(db, user, db_event.spond_event_id, accepted)
+            submitted_at = await _submit_rsvp(
+                db,
+                user,
+                db_event.spond_event_id,
+                accepted,
+                resolved_recipient_id=db_event.resolved_recipient_id,
+            )
             db_event.status = STATUS_PROCESSED
             db_event.error_message = None
             await _write_rsvp_log(db, db_event, user, fired_at, submitted_at, OUTCOME_SUCCESS, 0)
@@ -145,7 +158,11 @@ async def _process_event(event: Event) -> None:
             )
             try:
                 submitted_at = await _submit_rsvp(
-                    db, user, db_event.spond_event_id, accepted, force_refresh=True
+                    db,
+                    user,
+                    db_event.spond_event_id,
+                    accepted,
+                    force_refresh=True,
                 )
                 db_event.status = STATUS_PROCESSED
                 db_event.error_message = None
@@ -206,6 +223,7 @@ async def _submit_rsvp(
     accepted: bool,
     *,
     force_refresh: bool = False,
+    **kwargs,  # reserved for resolved_recipient_id (Task 4)
 ) -> datetime:
     """Obtain a fresh token, resolve recipient ID, fire the RSVP. Returns submitted_at."""
     token = await ensure_fresh_token(db, user, force=force_refresh)
