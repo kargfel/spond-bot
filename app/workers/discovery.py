@@ -31,6 +31,10 @@ logger = logging.getLogger(__name__)
 # Maximum IDs to send in a single getBulk request
 _BULK_CHUNK_SIZE = 50
 
+# Updated at the end of every successful discovery run.
+# None until the first run completes.
+last_discovery_at: datetime | None = None
+
 
 async def run_discovery() -> None:
     """Entry point called by APScheduler. Never raises — logs all errors."""
@@ -54,6 +58,8 @@ async def run_discovery() -> None:
     except Exception as exc:
         logger.exception("Discovery sync crashed unexpectedly: %s", exc)
 
+    global last_discovery_at
+    last_discovery_at = datetime.now(timezone.utc)
     logger.info("=== Discovery sync complete ===")
 
 
