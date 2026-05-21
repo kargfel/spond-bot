@@ -59,6 +59,13 @@
           >
             ${ICON.user} Users
           </button>
+          <button
+            class="sidebar-item"
+            data-view="rsvp-log"
+            onclick="switchView('rsvp-log', this)"
+          >
+            ${ICON.shield} RSVP Log
+          </button>
           <button class="sidebar-item" data-view="sync" onclick="doSync()">
             ${ICON.sync} Trigger Sync
           </button>
@@ -211,6 +218,32 @@
           <div class="user-cards-list" id="spond-users-table">
             <div class="flex-center" style="padding: 2rem">
               <span class="spinner" style="width: 20px; height: 20px; border-width: 3px"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── RSVP Log View ─────────────────────────────────────────── -->
+        <div id="view-rsvp-log" class="admin-section hidden">
+          <div class="page-header" style="margin-bottom: 1rem">
+            <h1 class="page-title">RSVP Audit Log</h1>
+            <button class="btn btn-outline btn-sm" onclick="loadRsvpLog()">
+              ${ICON.sync} Refresh
+            </button>
+          </div>
+          <div class="filter-bar mb-2">
+            <select id="rl-user" class="input" onchange="loadRsvpLog()">
+              <option value="">All Users</option>
+            </select>
+            <select id="rl-outcome" class="input" onchange="loadRsvpLog()">
+              <option value="">All Outcomes</option>
+              <option value="success">Success</option>
+              <option value="retry_success">Retry Success</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+          <div id="rsvp-log-wrap">
+            <div class="flex-center" style="padding: 2.5rem">
+              <span class="spinner" style="width: 22px; height: 22px; border-width: 3px"></span>
             </div>
           </div>
         </div>
@@ -438,9 +471,9 @@
     <script>
       // Fix template literals in static HTML
       document.querySelectorAll("[data-view]").forEach((el) => {
-        const icons = [ICON.events, ICON.user, ICON.sync];
-        const labels = [" Events", " Users", " Trigger Sync"];
-        const i = ["events", "users", "sync"].indexOf(
+        const icons = [ICON.events, ICON.user, ICON.shield, ICON.sync];
+        const labels = [" Events", " Users", " RSVP Log", " Trigger Sync"];
+        const i = ["events", "users", "rsvp-log", "sync"].indexOf(
           el.dataset.view ?? el.getAttribute("onclick")?.match(/'(\w+)'/)?.[1],
         );
         if (i >= 0) el.innerHTML = icons[i] + labels[i];
@@ -498,17 +531,13 @@
 
       // ── View switching ─────────────────────────────────────────────────
       function switchView(view, btn) {
-        document
-          .getElementById("view-events")
-          .classList.toggle("hidden", view !== "events");
-        document
-          .getElementById("view-users")
-          .classList.toggle("hidden", view !== "users");
-        document
-          .querySelectorAll(".sidebar-item")
-          .forEach((s) => s.classList.remove("active"));
-        if (btn) btn.classList.add("active");
-        if (view === "users") loadUsersView();
+        document.getElementById('view-events').classList.toggle('hidden', view !== 'events');
+        document.getElementById('view-users').classList.toggle('hidden', view !== 'users');
+        document.getElementById('view-rsvp-log').classList.toggle('hidden', view !== 'rsvp-log');
+        document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+        if (view === 'users') loadUsersView();
+        if (view === 'rsvp-log') loadRsvpLog();
       }
 
       // ── Stats ──────────────────────────────────────────────────────────
@@ -556,6 +585,17 @@
             opt.textContent = `${u.display_name} (${u.login})`;
             linkSel.appendChild(opt);
           });
+          // Also populate RSVP log user filter
+          const rlSel = document.getElementById('rl-user');
+          if (rlSel) {
+            rlSel.innerHTML = '<option value="">All Users</option>';
+            allSpondUsers.forEach(u => {
+              const opt = document.createElement('option');
+              opt.value = u.id;
+              opt.textContent = u.display_name;
+              rlSel.appendChild(opt);
+            });
+          }
         } catch {}
       }
 
@@ -999,6 +1039,73 @@
         } catch (err) {
           showToast(err.message, "error");
         }
+      }
+
+      // ── RSVP Audit Log ─────────────────────────────────────────────────
+      async function loadRsvpLog() {
+        const wrap = document.getElementById('rsvp-log-wrap');
+        wrap.innerHTML = `<div class="flex-center" style="padding:2.5rem"><span class="spinner" style="width:22px;height:22px;border-width:3px;"></span></div>`;
+
+        const userId = document.getElementById('rl-user')?.value || '';
+        const outcome = document.getElementById('rl-outcome')?.value || '';
+
+        let url = '/api/v1/admin/rsvp-log?limit=200';
+        if (userId) url += `&user_id=${userId}`;
+
+        try {
+          const res = await api(url);
+          if (!res.ok) throw new Error('Failed to fetch RSVP log');
+          let rows = await res.json();
+
+          if (outcome) rows = rows.filter(r => r.outcome === outcome);
+
+          renderRsvpLog(rows);
+        } catch (err) {
+          wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">Failed to load log</div><div class="empty-state-sub">${escHtml(err.message)}</div></div>`;
+        }
+      }
+
+      function renderRsvpLog(rows) {
+        const wrap = document.getElementById('rsvp-log-wrap');
+        if (!rows.length) {
+          wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">No RSVP log entries</div><div class="empty-state-sub">Entries appear here after the bot fires its first RSVP.</div></div>`;
+          return;
+        }
+
+        const outcomeBadge = (o) => {
+          if (o === 'success') return `<span class="badge badge-accept">success</span>`;
+          if (o === 'retry_success') return `<span class="badge badge-manual" style="background:rgba(255,180,0,0.15);color:#ffb400;border-color:rgba(255,180,0,0.3)">retry ok</span>`;
+          return `<span class="badge badge-decline">failed</span>`;
+        };
+
+        wrap.innerHTML = `
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+              <thead>
+                <tr style="border-bottom:1px solid var(--border);color:var(--text-muted)">
+                  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600">Fired At</th>
+                  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600">User</th>
+                  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600">Event ID</th>
+                  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600">Choice</th>
+                  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600">Outcome</th>
+                  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600">Retries</th>
+                  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600">Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.map(r => `
+                  <tr style="border-bottom:1px solid var(--surface-container-high)">
+                    <td style="padding:0.5rem 0.75rem;white-space:nowrap;color:var(--text-muted)">${fmtDate(r.fired_at)}</td>
+                    <td style="padding:0.5rem 0.75rem">${escHtml(getUserName(r.user_id))}</td>
+                    <td style="padding:0.5rem 0.75rem;font-family:monospace;font-size:0.75rem;color:var(--text-muted)">${escHtml(r.spond_event_id.slice(0, 12))}…</td>
+                    <td style="padding:0.5rem 0.75rem">${choiceBadge(r.choice)}</td>
+                    <td style="padding:0.5rem 0.75rem">${outcomeBadge(r.outcome)}</td>
+                    <td style="padding:0.5rem 0.75rem;text-align:center">${r.retry_count}</td>
+                    <td style="padding:0.5rem 0.75rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--status-red);font-size:0.75rem" title="${escHtml(r.error_detail || '')}">${escHtml(r.error_detail || '—')}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
       }
 
       // ── Utils ──────────────────────────────────────────────────────────
