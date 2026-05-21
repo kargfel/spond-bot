@@ -64,7 +64,7 @@ async def reschedule_pending_snipers() -> None:
     from sqlalchemy import select
 
     from app.database import AsyncSessionLocal
-    from app.models.event import CHOICE_ACCEPT, STATUS_PENDING, Event
+    from app.models.event import CHOICE_ACCEPT, CHOICE_DECLINE, STATUS_PENDING, Event
     from app.workers.executioner import schedule_sniper
 
     now = datetime.now(timezone.utc)
@@ -73,7 +73,7 @@ async def reschedule_pending_snipers() -> None:
             select(Event).where(
                 Event.invite_time > now,
                 Event.status == STATUS_PENDING,
-                Event.user_choice.in_([CHOICE_ACCEPT, "decline"]),
+                Event.user_choice.in_([CHOICE_ACCEPT, CHOICE_DECLINE]),
             )
         )
         events = result.scalars().all()
