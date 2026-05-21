@@ -18,7 +18,7 @@ import asyncio
 import contextlib
 import logging
 import uuid as _uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import aiohttp
 from apscheduler.jobstores.base import JobLookupError
@@ -240,22 +240,29 @@ def _sniper_job_id(event_id: _uuid.UUID) -> str:
 
 
 def schedule_sniper(scheduler: AsyncIOScheduler, event: Event) -> None:
-    """Schedule (or replace) a one-shot RSVP job at event.invite_time."""
+    """Schedule (or replace) a one-shot RSVP job at event.invite_time minus lead time."""
+    from app.config import settings
+
     now = datetime.now(timezone.utc)
     if not event.invite_time or event.invite_time <= now:
         return
+
+    fire_at = event.invite_time - timedelta(milliseconds=settings.rsvp_lead_time_ms)
+    if fire_at <= now:
+        fire_at = now  # already past adjusted time — fire immediately
+
     job_id = _sniper_job_id(event.id)
     with contextlib.suppress(JobLookupError):
         scheduler.remove_job(job_id)
     scheduler.add_job(
         run_sniper,
         trigger="date",
-        run_date=event.invite_time,
+        run_date=fire_at,
         id=job_id,
         args=[event.id],
         misfire_grace_time=30,
     )
-    logger.debug("Sniper scheduled for event %s at %s", event.id, event.invite_time)
+    logger.debug("Sniper scheduled for event %s at %s (lead=%dms)", event.id, fire_at, settings.rsvp_lead_time_ms)
 
 
 def cancel_sniper(scheduler: AsyncIOScheduler, event_id: _uuid.UUID) -> None:

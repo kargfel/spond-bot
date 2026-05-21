@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Scheduler
     discovery_interval_minutes: int = 60
     executioner_interval_seconds: int = 60
+    rsvp_lead_time_ms: int = 0
 
     # Timezone (used by APScheduler)
     tz: str = "Europe/Berlin"
