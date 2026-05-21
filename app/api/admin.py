@@ -107,6 +107,49 @@ async def get_admin_stats(db: AsyncSession = DbDep):
         for ev, display_name in failed_rows
     ]
 
+    # Compute timing percentiles from the last 200 RSVP submissions
+    # that have both submitted_at and the event's invite_time.
+    # Delta = submitted_at - invite_time in milliseconds.
+    # Uses Python-side percentile since SQLite (tests) doesn't support percentile_cont.
+    from sqlalchemy import and_
+
+    timing_rows = (
+        await db.execute(
+            select(
+                RsvpLog.submitted_at,
+                Event.invite_time,
+            )
+            .join(Event, RsvpLog.event_id == Event.id)
+            .where(
+                and_(
+                    RsvpLog.submitted_at.is_not(None),
+                    Event.invite_time.is_not(None),
+                )
+            )
+            .order_by(RsvpLog.fired_at.desc())
+            .limit(200)
+        )
+    ).all()
+
+    rsvp_p50_ms = None
+    rsvp_p95_ms = None
+    rsvp_sample_count = len(timing_rows)
+
+    if timing_rows:
+        deltas_ms = sorted(
+            int((row.submitted_at - row.invite_time).total_seconds() * 1000)
+            for row in timing_rows
+            if row.submitted_at and row.invite_time
+        )
+        if deltas_ms:
+            def _percentile(data: list[int], p: float) -> int:
+                idx = max(0, int(len(data) * p / 100) - 1)
+                return data[min(idx, len(data) - 1)]
+
+            rsvp_p50_ms = _percentile(deltas_ms, 50)
+            rsvp_p95_ms = _percentile(deltas_ms, 95)
+            rsvp_sample_count = len(deltas_ms)
+
     return AdminStatsResponse(
         active_users=active_users,
         total_events=total_events,
@@ -115,7 +158,7 @@ async def get_admin_stats(db: AsyncSession = DbDep):
         events_failed=events_failed,
         last_discovery_at=last_discovery_at,
         recent_failures=recent_failures,
-        rsvp_p50_ms=None,
-        rsvp_p95_ms=None,
-        rsvp_sample_count=0,
+        rsvp_p50_ms=rsvp_p50_ms,
+        rsvp_p95_ms=rsvp_p95_ms,
+        rsvp_sample_count=rsvp_sample_count,
     )
