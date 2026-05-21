@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # Load all models so Alembic can detect schema changes via autogenerate
 from app.database import Base
-from app.models import user, event, frontend_user  # noqa: F401
+from app.models import user, event, frontend_user, rsvp_log  # noqa: F401
 
 config = context.config
 
