@@ -37,10 +37,36 @@ from app.models.event import (
     STATUS_PROCESSING,
     Event,
 )
+from app.models.rsvp_log import OUTCOME_FAILED, OUTCOME_RETRY_SUCCESS, OUTCOME_SUCCESS, RsvpLog
 from app.models.user import User
 from app.services.auth import ensure_fresh_token
 
 logger = logging.getLogger(__name__)
+
+
+async def _write_rsvp_log(
+    db: AsyncSession,
+    event: Event,
+    user: User | None,
+    fired_at: datetime,
+    submitted_at: datetime | None,
+    outcome: str,
+    retry_count: int,
+    error_detail: str | None = None,
+) -> None:
+    """Append an immutable audit row for this RSVP attempt. Caller must commit."""
+    log = RsvpLog(
+        event_id=event.id,
+        user_id=user.id if user else None,
+        spond_event_id=event.spond_event_id,
+        choice=event.user_choice,
+        fired_at=fired_at,
+        submitted_at=submitted_at,
+        outcome=outcome,
+        retry_count=retry_count,
+        error_detail=error_detail,
+    )
+    db.add(log)
 
 
 async def run_executioner() -> None:
@@ -74,8 +100,9 @@ async def run_executioner() -> None:
 
 async def _process_event(event: Event) -> None:
     """Handle a single RSVP submission with one automatic retry on 401."""
+    fired_at = datetime.now(timezone.utc)
+
     async with AsyncSessionLocal() as db:
-        # Re-fetch within the new session so writes are tracked
         db_event = await db.get(Event, event.id)
         if not db_event or db_event.status != STATUS_PENDING:
             return
@@ -88,19 +115,23 @@ async def _process_event(event: Event) -> None:
             )
             db_event.status = STATUS_FAILED
             db_event.error_message = "User not found or missing profile_id."
+            await _write_rsvp_log(
+                db, db_event, None, fired_at, None, OUTCOME_FAILED, 0,
+                "User not found or missing profile_id.",
+            )
             await db.commit()
             return
 
-        # Mark as processing to prevent duplicate execution if scheduler overlaps
         db_event.status = STATUS_PROCESSING
         await db.commit()
 
         accepted = db_event.user_choice == CHOICE_ACCEPT
 
         try:
-            await _submit_rsvp(db, user, db_event.spond_event_id, accepted)
+            submitted_at = await _submit_rsvp(db, user, db_event.spond_event_id, accepted)
             db_event.status = STATUS_PROCESSED
             db_event.error_message = None
+            await _write_rsvp_log(db, db_event, user, fired_at, submitted_at, OUTCOME_SUCCESS, 0)
             logger.info(
                 "RSVP %s for %r (%r) → SUCCESS",
                 "ACCEPT" if accepted else "DECLINE",
@@ -108,17 +139,19 @@ async def _process_event(event: Event) -> None:
                 db_event.heading,
             )
         except SpondAuthError:
-            # Force token refresh and retry once
             logger.warning(
                 "401 on RSVP for %r — forcing token refresh and retrying.",
                 user.display_name,
             )
             try:
-                await _submit_rsvp(
+                submitted_at = await _submit_rsvp(
                     db, user, db_event.spond_event_id, accepted, force_refresh=True
                 )
                 db_event.status = STATUS_PROCESSED
                 db_event.error_message = None
+                await _write_rsvp_log(
+                    db, db_event, user, fired_at, submitted_at, OUTCOME_RETRY_SUCCESS, 1
+                )
                 logger.info(
                     "RSVP %s for %r (%r) → SUCCESS (after retry)",
                     "ACCEPT" if accepted else "DECLINE",
@@ -128,6 +161,9 @@ async def _process_event(event: Event) -> None:
             except Exception as retry_exc:
                 db_event.status = STATUS_FAILED
                 db_event.error_message = f"Retry failed: {retry_exc}"
+                await _write_rsvp_log(
+                    db, db_event, user, fired_at, None, OUTCOME_FAILED, 1, str(retry_exc)
+                )
                 logger.error(
                     "RSVP failed for %r (%r) after retry: %s",
                     user.display_name,
@@ -137,6 +173,9 @@ async def _process_event(event: Event) -> None:
         except SpondAPIError as exc:
             db_event.status = STATUS_FAILED
             db_event.error_message = str(exc)
+            await _write_rsvp_log(
+                db, db_event, user, fired_at, None, OUTCOME_FAILED, 0, str(exc)
+            )
             logger.error(
                 "RSVP API error for %r (%r): %s",
                 user.display_name,
@@ -146,6 +185,10 @@ async def _process_event(event: Event) -> None:
         except Exception as exc:
             db_event.status = STATUS_FAILED
             db_event.error_message = f"Unexpected error: {exc}"
+            await _write_rsvp_log(
+                db, db_event, user, fired_at, None, OUTCOME_FAILED, 0,
+                f"Unexpected error: {exc}",
+            )
             logger.exception(
                 "Unexpected RSVP error for %r (%r): %s",
                 user.display_name,
@@ -163,20 +206,17 @@ async def _submit_rsvp(
     accepted: bool,
     *,
     force_refresh: bool = False,
-) -> None:
-    """Obtain a fresh token, resolve the correct recipient ID, and fire the RSVP request."""
+) -> datetime:
+    """Obtain a fresh token, resolve recipient ID, fire the RSVP. Returns submitted_at."""
     token = await ensure_fresh_token(db, user, force=force_refresh)
 
     async with aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar()) as http:
-        # 1. Fetch full event details (needed to find the group)
         bulk = await spond_client.get_bulk_events(http, token, [spond_event_id])
         if not bulk:
             raise SpondAPIError(f"Event {spond_event_id} not found on Spond server")
 
         raw_event = bulk[0]
 
-        # 2. Resolve the correct member ID for this user in this event's group.
-        #    Spond uses per-group member IDs (not the global profile ID) for RSVPs.
         recipient_id = await spond_client.resolve_recipient_id(
             http, token, raw_event, user.login, user.profile_id  # type: ignore[arg-type]
         )
@@ -186,8 +226,9 @@ async def _submit_rsvp(
             user.display_name, spond_event_id, recipient_id, user.profile_id,
         )
 
-        # 3. Submit the RSVP
+        submitted_at = datetime.now(timezone.utc)
         await spond_client.rsvp(http, token, spond_event_id, recipient_id, accepted)
+        return submitted_at
 
 
 # ---------------------------------------------------------------------------
