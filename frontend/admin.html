@@ -128,6 +128,23 @@
             </div>
             <div class="stat-label">Failed</div>
           </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-last-discovery" style="font-size:0.75rem;font-weight:500">—</div>
+            <div class="stat-label">Last Discovery</div>
+          </div>
+        </div>
+
+        <!-- Recent Failures Widget -->
+        <div id="recent-failures-section" style="margin:0 0 1.5rem 0">
+          <div class="section-header" style="margin-bottom:0.5rem">
+            <span class="section-title" style="font-size:0.85rem">Recent Failures</span>
+            <span class="text-muted text-sm">Last 10 failed RSVPs</span>
+          </div>
+          <div id="recent-failures-wrap" style="background:var(--surface-container);border:1px solid var(--border);border-radius:10px;padding:0 1rem">
+            <div class="flex-center" style="padding: 1rem">
+              <span class="spinner" style="width: 16px; height: 16px; border-width: 2px"></span>
+            </div>
+          </div>
         </div>
 
         <!-- ── Events View ──────────────────────────────────────── -->
@@ -527,6 +544,7 @@
         // Load Spond users FIRST so getUserName() has data when events render
         await loadSpondUsers();
         await Promise.all([loadStats(), loadAdminEvents()]);
+        setInterval(loadStats, 30_000);
       }
 
       // ── View switching ─────────────────────────────────────────────────
@@ -540,27 +558,45 @@
         if (view === 'rsvp-log') loadRsvpLog();
       }
 
-      // ── Stats ──────────────────────────────────────────────────────────
+      // ── Stats (from /admin/stats) ──────────────────────────────────────
       async function loadStats() {
         try {
-          const [usersRes, eventsRes, pendingRes, failedRes] =
-            await Promise.all([
-              api("/users"),
-              api("/events?all=true"),
-              api("/events?all=true&status=pending"),
-              api("/events?all=true&status=failed"),
-            ]);
-          const [users, events, pending, failed] = await Promise.all([
-            usersRes.json(),
-            eventsRes.json(),
-            pendingRes.json(),
-            failedRes.json(),
-          ]);
-          document.getElementById("stat-users").textContent = users.length;
-          document.getElementById("stat-events").textContent = events.length;
-          document.getElementById("stat-pending").textContent = pending.length;
-          document.getElementById("stat-failed").textContent = failed.length;
+          const res = await api('/api/v1/admin/stats');
+          if (!res.ok) return;
+          const d = await res.json();
+
+          document.getElementById('stat-users').textContent = d.active_users;
+          document.getElementById('stat-events').textContent = d.total_events;
+          document.getElementById('stat-pending').textContent = d.events_pending;
+          document.getElementById('stat-failed').textContent = d.events_failed;
+
+          renderLastDiscovery(d.last_discovery_at);
+          renderRecentFailures(d.recent_failures);
         } catch {}
+      }
+
+      function renderLastDiscovery(isoTs) {
+        const el = document.getElementById('stat-last-discovery');
+        if (!el) return;
+        el.textContent = isoTs ? fmtDate(isoTs) : 'Never';
+      }
+
+      function renderRecentFailures(failures) {
+        const wrap = document.getElementById('recent-failures-wrap');
+        if (!wrap) return;
+        if (!failures.length) {
+          wrap.innerHTML = `<div class="empty-state" style="padding:1rem"><div class="empty-state-title" style="font-size:0.85rem">No recent failures</div></div>`;
+          return;
+        }
+        wrap.innerHTML = failures.map(f => `
+          <div style="padding:0.6rem 0;border-bottom:1px solid var(--surface-container-high);font-size:0.82rem">
+            <div style="display:flex;justify-content:space-between;gap:0.5rem;align-items:flex-start">
+              <span style="font-weight:500;color:var(--text)">${escHtml(f.heading || '—')}</span>
+              <span style="color:var(--text-muted);white-space:nowrap;font-size:0.75rem">${fmtDate(f.updated_at)}</span>
+            </div>
+            <div style="color:var(--mint);font-size:0.75rem">${escHtml(f.user_display_name)}</div>
+            ${f.error_message ? `<div style="color:var(--status-red);font-size:0.75rem;margin-top:0.2rem">${escHtml(f.error_message)}</div>` : ''}
+          </div>`).join('');
       }
 
       // ── Load Spond Users (for filter dropdown) ─────────────────────────
