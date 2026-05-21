@@ -105,3 +105,73 @@ async def test_stats_recent_failures(admin_client, test_db):
     assert len(data["recent_failures"]) == 1
     assert data["recent_failures"][0]["user_display_name"] == "FailUser"
     assert data["recent_failures"][0]["error_message"] == "Network timeout"
+
+
+@pytest.mark.asyncio
+async def test_stats_timing_metrics_present(admin_client, test_db):
+    resp = await admin_client.get("/api/v1/admin/stats")
+    assert resp.status_code == 200
+    data = resp.json()
+    # Fields must be present (None when no data)
+    assert "rsvp_p50_ms" in data
+    assert "rsvp_p95_ms" in data
+    assert "rsvp_sample_count" in data
+    assert data["rsvp_sample_count"] == 0
+    assert data["rsvp_p50_ms"] is None
+    assert data["rsvp_p95_ms"] is None
+
+
+@pytest.mark.asyncio
+async def test_stats_timing_metrics_with_data(admin_client, test_db):
+    from app.models.rsvp_log import RsvpLog, OUTCOME_SUCCESS
+    from app.models.user import User
+    from app.models.event import Event, STATUS_PROCESSED
+    from app.core.security import encrypt
+    from datetime import timedelta
+    import uuid
+
+    user = User(
+        id=uuid.uuid4(),
+        display_name="TimingUser",
+        login="timing@example.com",
+        encrypted_password=encrypt("fakepass"),
+        is_active=True,
+    )
+    test_db.add(user)
+    await test_db.flush()
+
+    invite_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+
+    for delay_ms in [100, 200, 300, 400, 500]:
+        ev = Event(
+            id=uuid.uuid4(),
+            spond_event_id=f"EVT-T-{uuid.uuid4().hex[:6]}",
+            user_id=user.id,
+            heading="Timed Event",
+            status=STATUS_PROCESSED,
+            invite_time=invite_time,
+        )
+        test_db.add(ev)
+        await test_db.flush()
+
+        submitted = invite_time + timedelta(milliseconds=delay_ms)
+        test_db.add(RsvpLog(
+            id=uuid.uuid4(),
+            event_id=ev.id,
+            user_id=user.id,
+            spond_event_id=ev.spond_event_id,
+            choice="accept",
+            fired_at=invite_time,
+            submitted_at=submitted,
+            outcome=OUTCOME_SUCCESS,
+            retry_count=0,
+        ))
+
+    await test_db.commit()
+
+    resp = await admin_client.get("/api/v1/admin/stats")
+    data = resp.json()
+    assert data["rsvp_sample_count"] == 5
+    # p50 of [100,200,300,400,500] should be around 300ms
+    assert data["rsvp_p50_ms"] is not None
+    assert 200 <= data["rsvp_p50_ms"] <= 400
