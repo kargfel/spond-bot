@@ -66,6 +66,8 @@ class Event(Base):
         String(20), default=STATUS_PENDING, nullable=False
     )
     error_message: Mapped[str | None] = mapped_column(String(1000))
+    # Cached by the warmup job ~10s before invite_time; avoids API round-trip at fire time.
+    resolved_recipient_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
