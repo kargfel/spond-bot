@@ -90,21 +90,9 @@ async def login(
     if not token:
         access_token_obj = result.get("accessToken")
         if isinstance(access_token_obj, dict):
-            # The token seems to be base64 encoded by Spond now, but we just pass it as-is
-            # unless the API strictly requires decoding. We'll store it directly.
-            # However, since Spond sometimes expects the decoded JWT, let's try decoding it.
-            # Actually, standard Spond mobile clients decode it. Let's decode if it's base64 encoded JWT.
-            raw_token = access_token_obj.get("token", "")
-            import base64
-            try:
-                # If it's a base64 encoded string of a JWT (starts with eyJ)
-                decoded = base64.b64decode(raw_token).decode('utf-8')
-                if decoded.startswith("ey"):
-                    token = decoded
-                else:
-                    token = raw_token
-            except Exception:
-                token = raw_token
+            # Spond now expects the raw Base64-encoded token to be passed exactly as-is 
+            # in the Authorization header. Decoding it will result in a 401 Unauthorized.
+            token = access_token_obj.get("token")
 
     if not token:
         raise SpondAuthError(
