@@ -132,6 +132,14 @@
             <div class="stat-value" id="stat-last-discovery" style="font-size:0.75rem;font-weight:500">—</div>
             <div class="stat-label">Last Discovery</div>
           </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-p50" style="color: var(--accent)">—</div>
+            <div class="stat-label">RSVP p50 (ms)</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-p95">—</div>
+            <div class="stat-label">RSVP p95 (ms)</div>
+          </div>
         </div>
 
         <!-- Recent Failures Widget -->
@@ -572,6 +580,14 @@
 
           renderLastDiscovery(d.last_discovery_at);
           renderRecentFailures(d.recent_failures);
+          document.getElementById('stat-p50').textContent =
+            d.rsvp_p50_ms != null ? d.rsvp_p50_ms : '—';
+          document.getElementById('stat-p95').textContent =
+            d.rsvp_p95_ms != null ? d.rsvp_p95_ms : '—';
+          const sampleEl = document.getElementById('stat-p50');
+          if (sampleEl && d.rsvp_sample_count) {
+            sampleEl.title = `Based on ${d.rsvp_sample_count} sample(s)`;
+          }
         } catch {}
       }
 
