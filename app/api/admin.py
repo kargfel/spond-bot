@@ -4,6 +4,7 @@
 All endpoints require is_admin == True (enforced via AdminDep).
 
 GET /admin/rsvp-log        Paginated RSVP audit log
+GET /admin/stats           System health stats
 """
 import uuid
 from datetime import datetime
