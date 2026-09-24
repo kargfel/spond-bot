@@ -12,7 +12,8 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -21,6 +22,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy import select
 
 from app.api import accounts as accounts_router
+from app.api.deps import CurrentUser
 from app.api import admin as admin_router
 from app.api import auth as auth_router
 from app.api import events as events_router
@@ -97,6 +99,8 @@ app = FastAPI(
     ),
     version="2.0.0",
     lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
 )
 
 # Register slowapi state and its 429 exception handler
@@ -136,6 +140,20 @@ async def serve_dashboard():
 @app.get("/admin.html")
 async def serve_admin():
     return FileResponse(_FRONTEND_DIR / "admin.html")
+
+
+@app.get("/docs", include_in_schema=False)
+async def protected_docs(current_user: dict = CurrentUser):
+    if not current_user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return get_swagger_ui_html(openapi_url="/openapi.json", title="SpondBot API")
+
+
+@app.get("/redoc", include_in_schema=False)
+async def protected_redoc(current_user: dict = CurrentUser):
+    if not current_user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return get_redoc_html(openapi_url="/openapi.json", title="SpondBot API")
 
 
 # Catch-all for assets (style.css, app.js) — sandboxed to the frontend dir
