@@ -9,21 +9,17 @@ DELETE /accounts/{id}         Delete a dashboard user account
 import logging
 import uuid
 
-import bcrypt
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminDep, DbDep
+from app.core.security import hash_password
 from app.models.frontend_user import FrontendUser
 from app.schemas.auth import FrontendUserCreate, FrontendUserResponse, FrontendUserUpdate
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/accounts", tags=["Accounts"])
-
-
-def _hash_password(plain: str) -> str:
-    return bcrypt.hashpw(plain[:72].encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 @router.post(
@@ -45,7 +41,7 @@ async def create_account(payload: FrontendUserCreate, db: AsyncSession = DbDep):
     user = FrontendUser(
         id=uuid.uuid4(),
         username=payload.username,
-        hashed_password=_hash_password(payload.password),
+        hashed_password=hash_password(payload.password),
         is_admin=payload.is_admin,
         linked_user_id=payload.linked_user_id,
     )
@@ -86,7 +82,7 @@ async def update_account(
     if payload.linked_user_id is not None:
         user.linked_user_id = payload.linked_user_id
     if payload.new_password:
-        user.hashed_password = _hash_password(payload.new_password)
+        user.hashed_password = hash_password(payload.new_password)
         logger.info("Admin reset password for account %r.", user.username)
     await db.commit()
     await db.refresh(user)

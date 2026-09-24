@@ -8,7 +8,6 @@ PATCH /auth/me/password     Change own password
 """
 import logging
 
-import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -18,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CurrentUser, DbDep
 from app.config import settings
 from app.core.jwt import ACCESS_TOKEN_TTL, create_access_token
+from app.core.security import hash_password, verify_password
 from app.models.frontend_user import FrontendUser
 from app.schemas.auth import (
     FrontendUserResponse,
@@ -34,19 +34,6 @@ _limiter = Limiter(key_func=get_remote_address)
 _COOKIE_NAME = "sb_session"
 _COOKIE_MAX_AGE = int(ACCESS_TOKEN_TTL.total_seconds())
 _IS_SECURE = settings.site_domain != "localhost"
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain[:72].encode("utf-8"), hashed.encode("utf-8"))
-
-
-def hash_password(plain: str) -> str:
-    return bcrypt.hashpw(plain[:72].encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 # ---------------------------------------------------------------------------

@@ -12,7 +12,6 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import bcrypt
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,6 +26,7 @@ from app.api import auth as auth_router
 from app.api import events as events_router
 from app.api import users as users_router
 from app.config import settings
+from app.core.security import hash_password
 from app.workers.scheduler import reschedule_pending_snipers, shutdown_scheduler, start_scheduler
 
 logging.basicConfig(
@@ -58,7 +58,7 @@ async def _seed_admin() -> None:
         admin = FrontendUser(
             id=uuid.uuid4(),
             username=settings.admin_username,
-            hashed_password=bcrypt.hashpw(settings.admin_password[:72].encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+            hashed_password=hash_password(settings.admin_password),
             is_admin=True,
             linked_user_id=None,
         )
