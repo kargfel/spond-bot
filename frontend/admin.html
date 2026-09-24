@@ -620,7 +620,7 @@
       // ── Load Spond Users (for filter dropdown) ─────────────────────────
       async function loadSpondUsers() {
         try {
-          const res = await api("/users");
+          const res = await api("/spond-accounts");
           if (!res.ok) return;
           allSpondUsers = await res.json();
           const sel = document.getElementById("f-user");
@@ -778,7 +778,7 @@
       async function saveEventDecision() {
         const choice = document.getElementById("edit-choice").value;
         try {
-          const res = await api(`/events/${editEventId}/decision`, "PATCH", {
+          const res = await api(`/events/${editEventId}`, "PATCH", {
             user_choice: choice,
           });
           if (!res.ok) throw new Error((await res.json()).detail || "Failed");
@@ -793,7 +793,7 @@
 
       async function retryEvent(id) {
         try {
-          const res = await api(`/events/${id}/decision`, "PATCH", {
+          const res = await api(`/events/${id}`, "PATCH", {
             user_choice: "accept",
           });
           if (!res.ok) throw new Error((await res.json()).detail || "Failed");
@@ -815,7 +815,7 @@
         const wrap = document.getElementById("frontend-users-table");
         wrap.innerHTML = `<div class="flex-center" style="padding:2rem"><span class="spinner" style="width:20px;height:20px;border-width:3px;"></span></div>`;
         try {
-          const res = await api("/auth/users");
+          const res = await api("/accounts");
           if (!res.ok) throw new Error("Failed");
           const users = await res.json();
           if (!users.length) {
@@ -880,7 +880,7 @@
 
       async function toggleSpondUser(id, active) {
         try {
-          const res = await api(`/users/${id}`, "PATCH", { is_active: active });
+          const res = await api(`/spond-accounts/${id}`, "PATCH", { is_active: active });
           if (!res.ok) throw new Error((await res.json()).detail || "Failed");
           showToast(
             `Account ${active ? "activated" : "deactivated"}.`,
@@ -898,7 +898,7 @@
         )
           return;
         try {
-          const res = await api(`/users/${id}`, "DELETE");
+          const res = await api(`/spond-accounts/${id}`, "DELETE");
           if (!res.ok && res.status !== 204)
             throw new Error((await res.json()).detail || "Failed");
           allSpondUsers = allSpondUsers.filter((u) => u.id !== id);
@@ -914,7 +914,7 @@
       async function deleteFrontendUser(id, username) {
         if (!confirm(`Delete dashboard account "${username}"?`)) return;
         try {
-          const res = await api(`/auth/users/${id}`, "DELETE");
+          const res = await api(`/accounts/${id}`, "DELETE");
           if (!res.ok && res.status !== 204)
             throw new Error((await res.json()).detail || "Failed");
           loadFrontendUsersTable();
@@ -970,7 +970,7 @@
 
         try {
           const res = await api(
-            `/auth/users/${editFrontendUserId}`,
+            `/accounts/${editFrontendUserId}`,
             "PATCH",
             body,
           );
@@ -1009,7 +1009,7 @@
         }
 
         try {
-          const res = await api("/auth/users", "POST", {
+          const res = await api("/accounts", "POST", {
             username,
             password,
             linked_user_id: linked,
@@ -1057,7 +1057,7 @@
         btn.innerHTML = '<span class="spinner"></span> Connecting...';
 
         try {
-          const res = await api("/users", "POST", {
+          const res = await api("/spond-accounts", "POST", {
             login,
             password,
             display_name,
@@ -1083,7 +1083,7 @@
       // ── Sync ───────────────────────────────────────────────────────────
       async function doSync() {
         try {
-          const res = await api("/sync", "POST");
+          const res = await api("/admin/sync", "POST");
           if (!res.ok) throw new Error((await res.json()).detail || "Failed");
           showToast("Discovery sync triggered.", "success");
           setTimeout(() => {
