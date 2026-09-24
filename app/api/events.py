@@ -7,18 +7,17 @@ Regular users can only see/modify events belonging to their linked Spond user.
 
 GET    /events                 List events (filterable)
 GET    /events/{id}            Get a single event
-PATCH  /events/{id}/decision   Set user_choice (accept/decline/manual)
-POST   /sync                   Manually trigger discovery sync (admin only)
+PATCH  /events/{id}            Set user_choice (accept/decline/manual)
 GET    /health                 Health check (public)
 """
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import AdminDep, CurrentUser, DbDep
+from app.api.deps import CurrentUser, DbDep
 from app.models.event import CHOICE_ACCEPT, CHOICE_MANUAL, STATUS_PENDING, Event
 from app.schemas.event import EventDecisionUpdate, EventResponse
 from app.workers.executioner import cancel_sniper, schedule_sniper
@@ -57,7 +56,7 @@ async def list_events(
     Returns events visible to the caller.
 
     Admins can optionally pass `user_id` to filter by a specific Spond user,
-    or pass `all=true` to fetch all users' events. For safety in dashboard views, 
+    or pass `all=true` to fetch all users' events. For safety in dashboard views,
     if an admin doesn't explicitly pass `all=true` or `user_id`, they only see their own events.
     Non-admin users always get only their own events regardless of `user_id`.
     """
@@ -101,7 +100,7 @@ async def get_event(
 
 
 @router.patch(
-    "/events/{event_id}/decision",
+    "/events/{event_id}",
     response_model=EventResponse,
     summary="Set RSVP decision for an event",
 )
@@ -146,20 +145,6 @@ async def set_decision(
         current_user.get("username"),
     )
     return event
-
-
-@router.post(
-    "/sync",
-    status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[AdminDep],
-    summary="Manually trigger a discovery sync (admin only)",
-)
-async def trigger_sync():
-    """Enqueues an immediate run of the discovery worker (admin only)."""
-    from app.workers.discovery import run_discovery
-    import asyncio
-    asyncio.create_task(run_discovery())
-    return {"detail": "Discovery sync triggered."}
 
 
 @router.get("/health", summary="Health check", include_in_schema=False)
