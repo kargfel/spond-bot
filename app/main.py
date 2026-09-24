@@ -21,6 +21,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from sqlalchemy import select
 
+from app.api import accounts as accounts_router
 from app.api import admin as admin_router
 from app.api import auth as auth_router
 from app.api import events as events_router
@@ -105,6 +106,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # CORS is intentionally omitted — the frontend is served from the same origin.
 
 # API Routes
+app.include_router(accounts_router.router, prefix="/api/v1")
 app.include_router(auth_router.router, prefix="/api/v1")
 app.include_router(users_router.router, prefix="/api/v1")
 app.include_router(events_router.router, prefix="/api/v1")

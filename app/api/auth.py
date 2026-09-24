@@ -1,15 +1,12 @@
 """
 /auth — Frontend authentication endpoints.
 
-POST /auth/login                Login with username + password → sets HttpOnly session cookie
-POST /auth/logout               Clear the session cookie
-GET  /auth/me                   Return current user info (requires cookie)
-POST /auth/users                Create a new frontend user (admin only)
-GET  /auth/users                List all frontend users (admin only)
-DELETE /auth/users/{id}         Delete a frontend user (admin only)
+POST  /auth/login           Login with username + password → sets HttpOnly session cookie
+POST  /auth/logout          Clear the session cookie
+GET   /auth/me              Return current user info (requires cookie)
+PATCH /auth/me/password     Change own password
 """
 import logging
-import uuid
 
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -18,14 +15,12 @@ from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import AdminDep, CurrentUser, DbDep
+from app.api.deps import CurrentUser, DbDep
 from app.config import settings
 from app.core.jwt import ACCESS_TOKEN_TTL, create_access_token
 from app.models.frontend_user import FrontendUser
 from app.schemas.auth import (
-    FrontendUserCreate,
     FrontendUserResponse,
-    FrontendUserUpdate,
     LoginRequest,
     PasswordChange,
 )
@@ -178,94 +173,3 @@ async def change_own_password(
     user.hashed_password = hash_password(payload.new_password)
     await db.commit()
     logger.info("User %r changed their password.", user.username)
-
-
-# ---------------------------------------------------------------------------
-# Admin-only endpoints
-# ---------------------------------------------------------------------------
-
-
-@router.post(
-    "/users",
-    response_model=FrontendUserResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[AdminDep],
-    summary="Create a frontend user account (admin only)",
-)
-async def create_frontend_user(payload: FrontendUserCreate, db: AsyncSession = DbDep):
-    existing = await db.execute(
-        select(FrontendUser).where(FrontendUser.username == payload.username)
-    )
-    if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Username {payload.username!r} already exists.",
-        )
-
-    user = FrontendUser(
-        id=uuid.uuid4(),
-        username=payload.username,
-        hashed_password=hash_password(payload.password),
-        is_admin=payload.is_admin,
-        linked_user_id=payload.linked_user_id,
-    )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    logger.info("Created frontend user %r (admin=%s).", user.username, user.is_admin)
-    return user
-
-
-@router.get(
-    "/users",
-    response_model=list[FrontendUserResponse],
-    dependencies=[AdminDep],
-    summary="List all frontend user accounts (admin only)",
-)
-async def list_frontend_users(db: AsyncSession = DbDep):
-    result = await db.execute(select(FrontendUser).order_by(FrontendUser.username))
-    return result.scalars().all()
-
-
-@router.patch(
-    "/users/{user_id}",
-    response_model=FrontendUserResponse,
-    dependencies=[AdminDep],
-    summary="Update a frontend user's role or link (admin only)",
-)
-async def update_frontend_user(
-    user_id: uuid.UUID,
-    payload: FrontendUserUpdate,
-    db: AsyncSession = DbDep,
-):
-    """Allow admins to toggle is_admin or change the linked_user_id for a frontend user."""
-    user = await db.get(FrontendUser, user_id)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
-
-    if payload.is_admin is not None:
-        user.is_admin = payload.is_admin
-    if payload.linked_user_id is not None:
-        user.linked_user_id = payload.linked_user_id
-    if payload.new_password:
-        user.hashed_password = hash_password(payload.new_password)
-        logger.info("Admin reset password for frontend user %r.", user.username)
-
-    await db.commit()
-    await db.refresh(user)
-    logger.info("Admin updated frontend user %r (is_admin=%s).", user.username, user.is_admin)
-    return user
-
-
-@router.delete(
-    "/users/{user_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[AdminDep],
-    summary="Delete a frontend user account (admin only)",
-)
-async def delete_frontend_user(user_id: uuid.UUID, db: AsyncSession = DbDep):
-    user = await db.get(FrontendUser, user_id)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
-    await db.delete(user)
-    await db.commit()
