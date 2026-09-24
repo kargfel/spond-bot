@@ -3,8 +3,9 @@
 
 All endpoints require is_admin == True (enforced via AdminDep).
 
-GET /admin/rsvp-log        Paginated RSVP audit log
-GET /admin/stats           System health stats
+GET  /admin/rsvp-log        Paginated RSVP audit log
+GET  /admin/stats           System health stats
+POST /admin/sync            Trigger a discovery sync
 """
 import uuid
 from datetime import datetime
