@@ -26,7 +26,7 @@ from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/users", tags=["Users"])
+router = APIRouter(prefix="/spond-accounts", tags=["Spond Accounts"])
 
 
 def _assert_own_or_admin(user_id: uuid.UUID, current_user: dict) -> None:
