@@ -12,8 +12,8 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import bcrypt
 from fastapi import FastAPI, Request
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -21,11 +21,14 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from sqlalchemy import select
 
+from app.api import accounts as accounts_router
+from app.api.deps import AdminDep
 from app.api import admin as admin_router
 from app.api import auth as auth_router
 from app.api import events as events_router
 from app.api import users as users_router
 from app.config import settings
+from app.core.security import hash_password
 from app.workers.scheduler import reschedule_pending_snipers, shutdown_scheduler, start_scheduler
 
 logging.basicConfig(
@@ -57,7 +60,7 @@ async def _seed_admin() -> None:
         admin = FrontendUser(
             id=uuid.uuid4(),
             username=settings.admin_username,
-            hashed_password=bcrypt.hashpw(settings.admin_password[:72].encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+            hashed_password=hash_password(settings.admin_password),
             is_admin=True,
             linked_user_id=None,
         )
@@ -96,6 +99,8 @@ app = FastAPI(
     ),
     version="2.0.0",
     lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
 )
 
 # Register slowapi state and its 429 exception handler
@@ -105,6 +110,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # CORS is intentionally omitted — the frontend is served from the same origin.
 
 # API Routes
+app.include_router(accounts_router.router, prefix="/api/v1")
 app.include_router(auth_router.router, prefix="/api/v1")
 app.include_router(users_router.router, prefix="/api/v1")
 app.include_router(events_router.router, prefix="/api/v1")
@@ -134,6 +140,16 @@ async def serve_dashboard():
 @app.get("/admin.html")
 async def serve_admin():
     return FileResponse(_FRONTEND_DIR / "admin.html")
+
+
+@app.get("/docs", include_in_schema=False)
+async def protected_docs(current_user: dict = AdminDep):
+    return get_swagger_ui_html(openapi_url="/openapi.json", title="SpondBot API")
+
+
+@app.get("/redoc", include_in_schema=False)
+async def protected_redoc(current_user: dict = AdminDep):
+    return get_redoc_html(openapi_url="/openapi.json", title="SpondBot API")
 
 
 # Catch-all for assets (style.css, app.js) — sandboxed to the frontend dir

@@ -335,7 +335,7 @@
 
         if (payload.linked_user_id) {
           try {
-            const res = await api(`/users/${payload.linked_user_id}`);
+            const res = await api(`/spond-accounts/${payload.linked_user_id}`);
             if (res.ok) {
               spond_user = await res.json();
               document.getElementById("user-display-name").textContent =
@@ -535,7 +535,7 @@
       // ── RSVP Decision ──────────────────────────────────────────────────
       async function setDecision(eventId, choice) {
         try {
-          const res = await api(`/events/${eventId}/decision`, "PATCH", {
+          const res = await api(`/events/${eventId}`, "PATCH", {
             user_choice: choice,
           });
           if (!res.ok)
@@ -564,7 +564,7 @@
           mBtn.innerHTML = `<span class="spinner"></span>`;
         }
         try {
-          const res = await api("/sync", "POST");
+          const res = await api("/admin/sync", "POST");
           if (!res.ok && res.status !== 403) throw new Error("Sync failed");
           showToast(
             res.status === 403
@@ -612,7 +612,7 @@
         const name = document.getElementById("profile-name").value.trim();
         if (!name || !spond_user) return;
         try {
-          const res = await api(`/users/${spond_user.id}`, "PATCH", {
+          const res = await api(`/spond-accounts/${spond_user.id}`, "PATCH", {
             display_name: name,
           });
           if (!res.ok)

@@ -3,13 +3,14 @@
 
 All endpoints require is_admin == True (enforced via AdminDep).
 
-GET /admin/rsvp-log        Paginated RSVP audit log
-GET /admin/stats           System health stats
+GET  /admin/rsvp-log        Paginated RSVP audit log
+GET  /admin/stats           System health stats
+POST /admin/sync            Trigger a discovery sync
 """
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -162,3 +163,17 @@ async def get_admin_stats(db: AsyncSession = DbDep):
         rsvp_p95_ms=rsvp_p95_ms,
         rsvp_sample_count=rsvp_sample_count,
     )
+
+
+@router.post(
+    "/sync",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[AdminDep],
+    summary="Manually trigger a discovery sync (admin only)",
+)
+async def trigger_sync():
+    """Enqueues an immediate run of the discovery worker."""
+    import asyncio
+    from app.workers.discovery import run_discovery
+    asyncio.create_task(run_discovery())
+    return {"detail": "Discovery sync triggered."}

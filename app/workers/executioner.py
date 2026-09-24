@@ -267,11 +267,19 @@ def schedule_sniper(scheduler: AsyncIOScheduler, event: Event) -> None:
     from app.config import settings
 
     now = datetime.now(timezone.utc)
-    if not event.invite_time or event.invite_time <= now:
+    invite = event.invite_time
+    if not invite:
+        return
+    # Normalize: if invite_time is naive, compare against naive UTC
+    if invite.tzinfo is None:
+        now_cmp = now.replace(tzinfo=None)
+    else:
+        now_cmp = now
+    if invite <= now_cmp:
         return
 
-    fire_at = event.invite_time - timedelta(milliseconds=settings.rsvp_lead_time_ms)
-    if fire_at <= now:
+    fire_at = invite - timedelta(milliseconds=settings.rsvp_lead_time_ms)
+    if fire_at <= now_cmp:
         fire_at = now  # already past adjusted time — fire immediately
 
     job_id = _sniper_job_id(event.id)
@@ -317,15 +325,18 @@ def schedule_warmup(scheduler: AsyncIOScheduler, event: Event) -> None:
     from app.config import settings
 
     now = datetime.now(timezone.utc)
-    if not event.invite_time:
+    invite = event.invite_time
+    if not invite:
         return
 
     fire_at = (
-        event.invite_time
+        invite
         - timedelta(milliseconds=settings.rsvp_lead_time_ms)
         - timedelta(seconds=10)
     )
-    if fire_at <= now:
+    # Normalize: if fire_at is naive, compare against naive UTC
+    now_cmp = now.replace(tzinfo=None) if fire_at.tzinfo is None else now
+    if fire_at <= now_cmp:
         return  # too close to fire time — skip warmup, sniper falls back
 
     job_id = _warmup_job_id(event.id)

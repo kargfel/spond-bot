@@ -1,14 +1,14 @@
 """
-/api/v1/users — User management endpoints.
+/api/v1/spond-accounts — Spond account management endpoints.
 
 Admins can list, create, update, and delete Spond user accounts.
 Regular users can only read and update their own linked Spond user profile.
 
-POST   /users           Register a new Spond user (admin only)
-GET    /users           List all users (admin only)
-GET    /users/{id}      Get a single user (admin or own)
-PATCH  /users/{id}      Update display_name or is_active (admin or own)
-DELETE /users/{id}      Remove user and cascade-delete events (admin only)
+POST   /spond-accounts           Register a new Spond user (admin only)
+GET    /spond-accounts           List all users (admin only)
+GET    /spond-accounts/{id}      Get a single user (admin or own)
+PATCH  /spond-accounts/{id}      Update display_name or is_active (admin or own)
+DELETE /spond-accounts/{id}      Remove user and cascade-delete events (admin only)
 """
 import logging
 import uuid
@@ -26,7 +26,7 @@ from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/users", tags=["Users"])
+router = APIRouter(prefix="/spond-accounts", tags=["Spond Accounts"])
 
 
 def _assert_own_or_admin(user_id: uuid.UUID, current_user: dict) -> None:
