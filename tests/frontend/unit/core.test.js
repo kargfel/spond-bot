@@ -1,0 +1,259 @@
+// Unit tests for frontend/core.js — pure logic shared by the dashboard and admin pages.
+// Run with: npm run test:unit   (TZ is pinned to UTC by the npm script)
+const { test, describe } = require("node:test");
+const assert = require("node:assert/strict");
+const Core = require("../../../frontend/core.js");
+
+const NOW = Date.parse("2026-09-26T21:00:00Z");
+const H = 3600e3;
+const D = 24 * H;
+const iso = (ms) => new Date(ms).toISOString();
+
+function ev(overrides = {}) {
+  return {
+    id: overrides.id || "e1",
+    user_id: "u1",
+    heading: "Training",
+    start_timestamp: iso(NOW + 2 * D),
+    invite_time: iso(NOW + 3 * H),
+    rsvp_date: null,
+    user_choice: "accept",
+    status: "pending",
+    error_message: null,
+    ...overrides,
+  };
+}
+
+describe("eventState", () => {
+  test("pending with an automatic answer is armed", () => {
+    assert.equal(Core.eventState(ev({ user_choice: "accept" }), NOW), "armed");
+    assert.equal(Core.eventState(ev({ user_choice: "decline" }), NOW), "armed");
+  });
+
+  test("pending manual event before registration opens is open (needs an answer)", () => {
+    assert.equal(Core.eventState(ev({ user_choice: "manual" }), NOW), "open");
+  });
+
+  test("pending manual event without invite time is open", () => {
+    assert.equal(Core.eventState(ev({ user_choice: "manual", invite_time: null }), NOW), "open");
+  });
+
+  test("manual event after registration opened is left to the member", () => {
+    const e = ev({ user_choice: "manual", invite_time: iso(NOW - H) });
+    assert.equal(Core.eventState(e, NOW), "self");
+  });
+
+  test("processing, processed and failed map to sending, sent and failed", () => {
+    assert.equal(Core.eventState(ev({ status: "processing" }), NOW), "sending");
+    assert.equal(Core.eventState(ev({ status: "processed" }), NOW), "sent");
+    assert.equal(Core.eventState(ev({ status: "failed" }), NOW), "failed");
+  });
+});
+
+describe("labels", () => {
+  test("choices use member language", () => {
+    assert.deepEqual(Core.CHOICE_LABELS, {
+      accept: "Going",
+      decline: "Not going",
+      manual: "Leave to me",
+    });
+  });
+
+  test("every state has a label", () => {
+    for (const s of ["open", "self", "armed", "sending", "sent", "failed"]) {
+      assert.equal(typeof Core.STATE_LABELS[s], "string", s);
+    }
+  });
+});
+
+describe("needsAnswer", () => {
+  test("returns open upcoming events ordered by invite time", () => {
+    const events = [
+      ev({ id: "late", user_choice: "manual", invite_time: iso(NOW + 5 * D) }),
+      ev({ id: "armed", user_choice: "accept" }),
+      ev({ id: "soon", user_choice: "manual", invite_time: iso(NOW + D) }),
+      ev({ id: "noinvite", user_choice: "manual", invite_time: null }),
+    ];
+    assert.deepEqual(
+      Core.needsAnswer(events, NOW).map((e) => e.id),
+      ["soon", "late", "noinvite"],
+    );
+  });
+
+  test("skips events that already started", () => {
+    const events = [
+      ev({ id: "past", user_choice: "manual", start_timestamp: iso(NOW - H), invite_time: null }),
+    ];
+    assert.deepEqual(Core.needsAnswer(events, NOW), []);
+  });
+});
+
+describe("nextAnswer", () => {
+  test("returns the armed event whose invite time comes first", () => {
+    const events = [
+      ev({ id: "b", invite_time: iso(NOW + 2 * D) }),
+      ev({ id: "a", invite_time: iso(NOW + 3 * H) }),
+      ev({ id: "manual", user_choice: "manual", invite_time: iso(NOW + H) }),
+      ev({ id: "sent", status: "processed", invite_time: iso(NOW + H) }),
+    ];
+    assert.equal(Core.nextAnswer(events, NOW).id, "a");
+  });
+
+  test("ignores armed events whose invite time has passed", () => {
+    const events = [ev({ id: "due", invite_time: iso(NOW - H) })];
+    assert.equal(Core.nextAnswer(events, NOW), null);
+  });
+
+  test("returns null when nothing is armed", () => {
+    assert.equal(Core.nextAnswer([], NOW), null);
+  });
+});
+
+describe("splitByTime", () => {
+  test("upcoming ascending by start, past descending, undated counts as upcoming", () => {
+    const events = [
+      ev({ id: "u2", start_timestamp: iso(NOW + 3 * D) }),
+      ev({ id: "p1", start_timestamp: iso(NOW - D) }),
+      ev({ id: "u1", start_timestamp: iso(NOW + D) }),
+      ev({ id: "p2", start_timestamp: iso(NOW - 3 * D) }),
+      ev({ id: "nodate", start_timestamp: null }),
+    ];
+    const { upcoming, past } = Core.splitByTime(events, NOW);
+    assert.deepEqual(upcoming.map((e) => e.id), ["u1", "u2", "nodate"]);
+    assert.deepEqual(past.map((e) => e.id), ["p1", "p2"]);
+  });
+});
+
+describe("groupByDay", () => {
+  test("groups consecutive events by calendar day and keeps order", () => {
+    const events = [
+      ev({ id: "a", start_timestamp: "2026-09-28T09:00:00Z" }),
+      ev({ id: "b", start_timestamp: "2026-09-28T18:00:00Z" }),
+      ev({ id: "c", start_timestamp: "2026-09-30T10:00:00Z" }),
+      ev({ id: "d", start_timestamp: null }),
+    ];
+    const groups = Core.groupByDay(events);
+    assert.deepEqual(groups.map((g) => g.key), ["2026-09-28", "2026-09-30", "none"]);
+    assert.deepEqual(groups[0].events.map((e) => e.id), ["a", "b"]);
+    assert.equal(groups[2].date, null);
+  });
+});
+
+describe("countByState", () => {
+  test("counts every state, including zeros", () => {
+    const counts = Core.countByState(
+      [ev(), ev({ status: "failed" }), ev({ user_choice: "manual" }), ev()],
+      NOW,
+    );
+    assert.deepEqual(counts, { open: 1, self: 0, armed: 2, sending: 0, sent: 0, failed: 1 });
+  });
+});
+
+describe("retryPayload", () => {
+  test("retries with the member's existing choice", () => {
+    assert.deepEqual(Core.retryPayload(ev({ status: "failed", user_choice: "decline" })), {
+      user_choice: "decline",
+    });
+  });
+
+  test("cannot retry an event left to the member", () => {
+    assert.equal(Core.retryPayload(ev({ status: "failed", user_choice: "manual" })), null);
+  });
+});
+
+describe("formatting", () => {
+  test("formatDuration picks one readable unit pair", () => {
+    assert.equal(Core.formatDuration(30e3), "30 s");
+    assert.equal(Core.formatDuration(400), "1 s");
+    assert.equal(Core.formatDuration(4 * 60e3 + 10e3), "4 min");
+    assert.equal(Core.formatDuration(2 * H + 59 * 60e3), "2h 59m");
+    assert.equal(Core.formatDuration(D + 4 * H + 5 * 60e3), "1d 4h");
+    assert.equal(Core.formatDuration(-2 * H), "2h 0m");
+  });
+
+  test("formatRelative says in / ago", () => {
+    assert.equal(Core.formatRelative(iso(NOW + 3 * H), NOW), "in 3h 0m");
+    assert.equal(Core.formatRelative(iso(NOW - 5 * 60e3), NOW), "5 min ago");
+    assert.equal(Core.formatRelative(null, NOW), "");
+  });
+
+  test("formatClock is a zero-padded countdown that never goes negative", () => {
+    assert.equal(Core.formatClock(2 * H + 59 * 60e3 + 14e3), "02:59:14");
+    assert.equal(Core.formatClock(D + 4 * H + 12 * 60e3 + 9e3), "1d 04:12:09");
+    assert.equal(Core.formatClock(-5000), "00:00:00");
+  });
+
+  test("dates are short, without the year", () => {
+    assert.equal(Core.formatDay("2026-09-28T15:00:00Z"), "Mon 28 Sep");
+    assert.equal(Core.formatTime("2026-09-28T15:07:00Z"), "15:07");
+    assert.equal(Core.formatStamp("2026-09-28T15:07:03Z"), "28.09 15:07:03");
+    assert.equal(Core.formatDay(null), "");
+  });
+
+  test("dayParts gives weekday, day number and month for date badges", () => {
+    assert.deepEqual(Core.dayParts("2026-10-02T18:00:00Z"), { weekday: "Fri", day: 2, month: "Oct" });
+  });
+
+  test("escapeHtml neutralises markup and quotes", () => {
+    assert.equal(Core.escapeHtml(`<b a="x">'&`), "&lt;b a=&quot;x&quot;&gt;&#39;&amp;");
+    assert.equal(Core.escapeHtml(null), "");
+  });
+});
+
+describe("timelineScale", () => {
+  test("maps a time to a clamped percentage of the range", () => {
+    const pct = Core.timelineScale(NOW, NOW + 10 * D);
+    assert.equal(pct(NOW), 0);
+    assert.equal(pct(NOW + 5 * D), 50);
+    assert.equal(pct(NOW + 20 * D), 100);
+    assert.equal(pct(NOW - D), 0);
+    assert.equal(pct(iso(NOW + 2.5 * D)), 25);
+  });
+});
+
+describe("buildQueue (admin)", () => {
+  const users = [
+    { id: "u1", display_name: "Felix" },
+    { id: "u2", display_name: "Mara" },
+  ];
+
+  test("joins users and scheduler jobs, failed first, sent last", () => {
+    const events = [
+      ev({ id: "sent", status: "processed", invite_time: iso(NOW - D) }),
+      ev({ id: "late", user_id: "u2", invite_time: iso(NOW + 2 * D) }),
+      ev({ id: "soon", invite_time: iso(NOW + H) }),
+      ev({ id: "bad", status: "failed", invite_time: iso(NOW - 2 * H) }),
+    ];
+    const jobs = [{ job_id: "sniper_soon", event_id: "soon", fire_at: iso(NOW + H), countdown_s: 3600 }];
+    const rows = Core.buildQueue(events, jobs, users, NOW);
+    assert.deepEqual(rows.map((r) => r.event.id), ["bad", "soon", "late", "sent"]);
+    assert.equal(rows[1].job.job_id, "sniper_soon");
+    assert.equal(rows[2].job, null);
+    assert.equal(rows[2].userName, "Mara");
+    assert.equal(rows[0].state, "failed");
+  });
+
+  test("falls back to a short id for unknown users", () => {
+    const rows = Core.buildQueue([ev({ user_id: "abcdef123456" })], [], [], NOW);
+    assert.equal(rows[0].userName, "abcdef12");
+  });
+});
+
+describe("groupByUser (admin timeline)", () => {
+  test("one lane per user, sorted by name, events sorted by invite time", () => {
+    const users = [
+      { id: "u2", display_name: "Mara" },
+      { id: "u1", display_name: "Felix" },
+      { id: "u3", display_name: "Idle" },
+    ];
+    const events = [
+      ev({ id: "m", user_id: "u2" }),
+      ev({ id: "f2", user_id: "u1", invite_time: iso(NOW + 2 * D) }),
+      ev({ id: "f1", user_id: "u1", invite_time: iso(NOW + D) }),
+    ];
+    const lanes = Core.groupByUser(events, users);
+    assert.deepEqual(lanes.map((l) => l.name), ["Felix", "Idle", "Mara"]);
+    assert.deepEqual(lanes[0].events.map((e) => e.id), ["f1", "f2"]);
+    assert.deepEqual(lanes[1].events, []);
+  });
+});

@@ -1,0 +1,13 @@
+{
+  "name": "spondbot-frontend-tests",
+  "private": true,
+  "description": "Test tooling for the static SpondBot frontend (no build step; nothing here ships to the browser).",
+  "scripts": {
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "TZ=UTC node --test tests/frontend/unit/*.test.js",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0"
+  }
+}

@@ -59,7 +59,25 @@ app/
     users.py               /users/* endpoints (Spond user CRUD)
     deps.py                FastAPI dependency injectors (CurrentUser, DbDep, AdminDep)
   schemas/                 Pydantic request/response models
+frontend/                  Static pages, no build step (served by app/main.py)
+  index.html               Sign-in page
+  dashboard.html/.js       Member dashboard: decision inbox + day-grouped agenda
+  admin.html/.js           Admin console: queue, timeline, users, log, charts
+  core.js                  Pure view logic (event state, grouping, formatting); unit tested
+  app.js                   Shared browser layer: API calls, auth guards, dialogs, toasts
+  member.css / admin.css   Light member theme / dark admin theme
 ```
+
+## Frontend Tests
+
+Frontend changes are test-driven. `npm install` once, then:
+
+- `npm run test:unit` — `node:test` unit tests for `frontend/core.js` (`tests/frontend/unit/`)
+- `npm run test:e2e` — Playwright tests against the real pages with a stateful mock API
+  (`tests/frontend/e2e/fixtures.js`); desktop and phone viewports; no backend needed.
+  Set `PW_CHROMIUM_PATH` to use a preinstalled Chromium.
+
+Member-facing labels: `accept`/`decline`/`manual` are shown as Going / Not going / Leave to me.
 
 ## Event Lifecycle
 

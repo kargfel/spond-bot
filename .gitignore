@@ -24,3 +24,8 @@ claude-memory-compiler/
 .claude/
 .obsidian/
 
+
+# Frontend test tooling
+node_modules/
+test-results/
+playwright-report/

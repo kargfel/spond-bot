@@ -25,7 +25,7 @@
 | `app/api/stream.py` | `/admin/stream`, `/user/stream` — SSE admin and user streams |
 | `app/api/deps.py` | FastAPI dependency injectors: `CurrentUser`, `DbDep`, `AdminDep` |
 | `app/schemas/` | Pydantic request/response models |
-| `frontend/` | Vanilla JS SPA — `index.html` (login), `dashboard.html`, `admin.html`, `app.js`, `style.css` |
+| `frontend/` | Vanilla JS SPA — `index.html` (login), `dashboard.html`, `admin.html`, `app.js`, `core.js`, `dashboard.js`, `admin.js`, `member.css`, `admin.css` |
 
 ---
 
