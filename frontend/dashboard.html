@@ -62,7 +62,7 @@
               <div class="sidebar-username" id="user-display-name">
                 Loading…
               </div>
-              <div class="sidebar-role text-muted" style="font-size: 0.7rem">
+              <div class="sidebar-role text-muted" id="user-spond-label" style="font-size: 0.7rem">
                 Spond Member
               </div>
             </div>
@@ -348,6 +348,18 @@
               );
             }
           } catch {}
+        }
+
+        const spondLabelEl = document.getElementById("user-spond-label");
+        if (spondLabelEl) {
+          if (payload.linked_user_id && spond_user) {
+            spondLabelEl.textContent = payload.is_admin
+              ? `Admin · Managing: ${spond_user.display_name}`
+              : `Managing: ${spond_user.display_name}`;
+          } else if (!payload.linked_user_id && !payload.is_admin) {
+            spondLabelEl.textContent = "No Spond account linked";
+          }
+          // Admins without linked account keep "Administrator" from earlier
         }
 
         await loadEvents();
