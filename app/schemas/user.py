@@ -27,3 +27,10 @@ class UserResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class SpondConnect(BaseModel):
+    """A signed-in login connecting its own Spond account."""
+    login: str = Field(..., min_length=1, max_length=255)
+    password: str = Field(..., min_length=1)
+    display_name: str | None = Field(None, min_length=1, max_length=255)

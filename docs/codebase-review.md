@@ -44,6 +44,7 @@
 - **2026-09-24**: User dashboard improved (Spond account indicator, Change Password button)
 - **2026-09-26**: Frontend redesign (PR #22): member decision inbox + agenda, admin console with queue, timeline, users, log and charts; frontend unit and e2e tests
 - **2026-09-26**: CI (GitHub Actions), pinned dependency lock, Dependabot
+- **2026-09-27**: Invite links and self-connect for members, `/health` returns 503 on failure + Docker HEALTHCHECK + optional autoheal, nightly `pg_dump` backups; CI runs migrations on Postgres 16
 
 ---
 
@@ -146,6 +147,7 @@ The initial implementation tried to base64-decode the `accessToken.token` value,
 - **Migrations are hand-written:** Alembic runs on container start (`alembic upgrade head`), with migrations in `migrations/versions/`. New schema changes need a matching migration.
 - **Test coverage gaps:** API routes, the executioner and discovery tracking have pytest coverage, and the frontend has unit and e2e tests. The Spond client itself (`spond_client.py`) is only exercised through mocks; there is no contract test against Spond's real responses.
 - **Audit log is append-only:** the `rsvp_log` table records every submission attempt (outcome, timing, error detail). The `/admin/rsvp-log` endpoint accepts a `limit` param (default 100, max 500) and supports `user_id`/`since` filters.
+- **Stored Spond passwords cannot be updated:** `PATCH /spond-accounts/{id}` only changes the display name and active flag. After a member changes their Spond password, the account must be deleted and reconnected, which drops its events and answers until the next sync.
 - **Fernet key rotation is destructive:** changing `FERNET_KEY` invalidates all stored credentials with no migration path.
 - **Single APScheduler instance:** the scheduler lives in the same process as the web server. Under high load, a slow RSVP batch could affect HTTP response times. For scale, consider a separate worker process.
 - **Discovery is sequential per user:** `_sync_user()` calls are made in a loop, not concurrently. With many users, discovery can take a long time. Consider `asyncio.gather` with a semaphore.

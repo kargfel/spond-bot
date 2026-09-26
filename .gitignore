@@ -29,3 +29,6 @@ claude-memory-compiler/
 node_modules/
 test-results/
 playwright-report/
+
+# Database backups (contain encrypted Spond credentials)
+backups/

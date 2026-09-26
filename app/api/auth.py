@@ -8,16 +8,14 @@ PATCH /auth/me/password     Change own password
 """
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DbDep
-from app.config import settings
-from app.core.jwt import ACCESS_TOKEN_TTL, create_access_token
+from app.core.rate_limit import limiter
 from app.core.security import hash_password, verify_password
+from app.core.session import clear_session_cookie, set_session_cookie
 from app.models.frontend_user import FrontendUser
 from app.schemas.auth import (
     FrontendUserResponse,
@@ -27,13 +25,6 @@ from app.schemas.auth import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Auth"])
-
-_limiter = Limiter(key_func=get_remote_address)
-
-# Cookie name and settings
-_COOKIE_NAME = "sb_session"
-_COOKIE_MAX_AGE = int(ACCESS_TOKEN_TTL.total_seconds())
-_IS_SECURE = settings.site_domain != "localhost"
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +37,7 @@ _IS_SECURE = settings.site_domain != "localhost"
     summary="Login and set a secure session cookie",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-@_limiter.limit("5/minute")
+@limiter.limit("5/minute")
 async def login(
     request: Request,
     response: Response,
@@ -78,24 +69,7 @@ async def login(
             detail="Incorrect username or password.",
         )
 
-    token = create_access_token(
-        {
-            "sub": str(user.id),
-            "username": user.username,
-            "is_admin": user.is_admin,
-            "linked_user_id": str(user.linked_user_id) if user.linked_user_id else None,
-        }
-    )
-
-    response.set_cookie(
-        key=_COOKIE_NAME,
-        value=token,
-        max_age=_COOKIE_MAX_AGE,
-        httponly=True,
-        secure=_IS_SECURE,
-        samesite="strict",
-        path="/",
-    )
+    set_session_cookie(response, user)
     logger.info("Frontend user %r logged in.", user.username)
 
 
@@ -106,12 +80,7 @@ async def login(
 )
 async def logout(response: Response):
     """Delete the session cookie, effectively logging the user out."""
-    response.delete_cookie(
-        key=_COOKIE_NAME,
-        path="/",
-        secure=_IS_SECURE,
-        samesite="strict",
-    )
+    clear_session_cookie(response)
 
 
 @router.get(

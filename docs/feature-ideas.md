@@ -34,6 +34,8 @@ Shipped. `GET /admin/stream` pushes `rsvp_fired` and `scheduler_changed` events 
 
 ### ✅ 5. Charts & Scheduler Panel
 
+*UI since replaced by the redesign (#8); the features remain.*
+
 Shipped. Admin Charts tab has a latency scatter plot (Chart.js), daily success/retry/failed bar chart, and per-user stats table. Scheduler panel lists armed sniper jobs with countdown; supports cancel and immediate fire.
 
 ---
@@ -55,6 +57,8 @@ Swagger UI (`/docs`, `/redoc`) now requires an active admin session.
 
 ### ✅ 7. User Dashboard UX (PR #20)
 
+*UI since replaced by the redesign (#8).*
+
 Shipped. Dashboard sidebar shows "Managing: [Spond account name]" (or "No Spond account linked"). Change Password exposed as a direct sidebar button — no admin required.
 
 ---
@@ -62,6 +66,20 @@ Shipped. Dashboard sidebar shows "Managing: [Spond account name]" (or "No Spond 
 ### ✅ 8. Frontend Redesign (PR #22)
 
 Shipped. Member dashboard with a decision inbox (one undecided event at a time) and a day-grouped agenda using Going / Not going / Leave to me. Admin console with a live countdown to the next answer, a queue ordered by fire time, a per-account timeline, and users, log and charts views. Frontend logic is unit tested and the pages have Playwright e2e tests.
+
+---
+
+### ✅ 17. Member Self-Onboarding
+
+Shipped. Admins create single-use invite links (`/join#<token>`, 1–30 days); the member picks their own login and connects their own Spond account, so admins never handle members' passwords. Logins without a Spond account can connect one from the dashboard (`POST /spond-accounts/me`).
+
+### ✅ 18. Health Checks
+
+Shipped. `/api/v1/health` returns 503 when the database or scheduler is down; the image has a `HEALTHCHECK`; optional `autoheal` compose profile restarts an unhealthy app.
+
+### ✅ 19. Database Backups
+
+Shipped. Compose `backup` service: `pg_dump` every 24h with 14-day retention, restore steps in `docs/setup.md`.
 
 ---
 

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Join · SpondBot</title>
+    <meta name="description" content="Create your SpondBot login from an invite." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Public+Sans:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="member.css?v=2" />
+  </head>
+  <body>
+    <div class="signin">
+      <section class="signin-brand">
+        <div>
+          <div class="wordmark">Spond<span>Bot</span></div>
+          <h1>Your answer goes out the second registration opens.</h1>
+        </div>
+        <dl class="signin-trace" aria-label="How it works">
+          <dt>You pick</dt><dd>Going</dd>
+          <dt>Registration opens</dt><dd>19:30:00.000</dd>
+          <dt>Answer sent</dt><dd>19:30:00.041</dd>
+        </dl>
+      </section>
+
+      <main class="signin-main">
+        <p class="signin-status" id="join-loading">Checking your invite…</p>
+
+        <div class="signin-form" id="join-invalid" hidden>
+          <h2>Invite not usable</h2>
+          <p id="join-invalid-text"></p>
+          <a class="btn" href="/">Sign in</a>
+        </div>
+
+        <form class="signin-form" id="join-form" novalidate hidden>
+          <h2>Create your login</h2>
+          <p id="join-intro">Pick a username and password for SpondBot, then connect your Spond account.</p>
+          <p class="form-error" id="join-error" role="alert" hidden></p>
+
+          <div class="field">
+            <label for="join-username">Username</label>
+            <input id="join-username" class="input" type="text" autocomplete="username" autocapitalize="none" maxlength="255" />
+          </div>
+          <div class="field">
+            <label for="join-password">Password</label>
+            <input id="join-password" class="input" type="password" autocomplete="new-password" aria-describedby="join-password-hint" />
+            <span class="hint" id="join-password-hint">At least 8 characters.</span>
+          </div>
+          <div class="field">
+            <label for="join-repeat">Repeat password</label>
+            <input id="join-repeat" class="input" type="password" autocomplete="new-password" />
+          </div>
+
+          <fieldset class="form-section">
+            <legend>Your Spond account</legend>
+            <p class="hint">SpondBot signs in to Spond as you to send your answers. Your Spond password is stored encrypted and never shown to anyone.</p>
+            <div class="field">
+              <label for="join-spond-login">Spond email or phone</label>
+              <input id="join-spond-login" class="input" type="text" autocomplete="off" autocapitalize="none" />
+            </div>
+            <div class="field">
+              <label for="join-spond-password">Spond password</label>
+              <input id="join-spond-password" class="input" type="password" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="join-display-name">Name shown in SpondBot</label>
+              <input id="join-display-name" class="input" type="text" maxlength="255" autocomplete="name" />
+            </div>
+          </fieldset>
+
+          <button type="submit" class="btn btn-primary" id="join-submit">Create login</button>
+        </form>
+      </main>
+    </div>
+
+    <script src="core.js?v=1"></script>
+    <script src="app.js?v=8"></script>
+    <script src="join.js?v=1"></script>
+  </body>
+</html>

@@ -72,8 +72,8 @@ The upsert never overwrites an existing `user_choice` — only metadata (heading
 
 **Executioner:** Runs every 60 seconds. Finds events where `invite_time <= now AND status=pending AND choice IN (accept, decline)` and fires RSVPs concurrently via `asyncio.gather`. Acts as a fallback safety net.
 
-**Sniper:** Each event with a known future `invite_time` and an active choice gets a one-shot APScheduler `DateTrigger` job scheduled at exactly `invite_time`. This provides millisecond-precision RSVP timing without polling overhead. Snipers are rescheduled on:
-- User setting/changing a decision (`PATCH /events/{id}/decision`)
+**Sniper:** Each event with a known future `invite_time` and an active choice gets a one-shot APScheduler `DateTrigger` job scheduled at `invite_time` minus `RSVP_LEAD_TIME_MS` (default 0, i.e. exactly at `invite_time`). This provides millisecond-precision RSVP timing without polling overhead. Snipers are rescheduled on:
+- User setting/changing a decision (`PATCH /events/{id}`)
 - Discovery finding an updated `invite_time`
 - Application startup (in-memory jobs don't survive restarts)
 
@@ -105,11 +105,20 @@ All routes are prefixed with `/api/v1/`.
 | `PATCH` | `/accounts/{id}` | admin | Update dashboard user |
 | `DELETE` | `/accounts/{id}` | admin | Delete dashboard user |
 | `GET` | `/spond-accounts` | admin | List Spond credential accounts |
-| `POST` | `/spond-accounts` | admin | Create Spond account |
-| `PATCH` | `/spond-accounts/{id}` | admin | Update Spond account |
-| `DELETE` | `/spond-accounts/{id}` | admin | Delete Spond account |
-| `GET` | `/events` | user | List events for current user |
+| `POST` | `/spond-accounts` | admin | Create Spond account (credentials verified with Spond) |
+| `POST` | `/spond-accounts/me` | user | Connect a Spond account to your own unlinked login; re-issues the session cookie |
+| `GET` | `/spond-accounts/{id}` | admin or own | Get one Spond account |
+| `PATCH` | `/spond-accounts/{id}` | admin or own | Update display name or active flag |
+| `DELETE` | `/spond-accounts/{id}` | admin | Delete Spond account (cascades to its events) |
+| `POST` | `/invites` | admin | Create a single-use invite; returns the token once |
+| `GET` | `/invites` | admin | List invites with status (pending, used, expired) |
+| `DELETE` | `/invites/{id}` | admin | Revoke an invite |
+| `POST` | `/invites/check` | — | Is an invite token usable? (rate-limited) |
+| `POST` | `/invites/accept` | — | Create login + connect Spond + sign in (rate-limited) |
+| `GET` | `/events` | user | List events for current user (`all=true` for admins) |
+| `GET` | `/events/{id}` | user | Get one event |
 | `PATCH` | `/events/{id}` | user | Set RSVP decision (arms/disarms sniper) |
+| `GET` | `/health` | — | 200 when database and scheduler are OK, 503 otherwise |
 | `GET` | `/admin/rsvp-log` | admin | RSVP audit log |
 | `GET` | `/admin/stats` | admin | System health stats (p50/p95 timing latency) |
 | `POST` | `/admin/sync` | admin | Trigger discovery sync immediately |
@@ -167,6 +176,17 @@ submitted_at     TIMESTAMPTZ   ← when the Spond API call returned
 outcome          VARCHAR  (success|retry_success|failed)
 retry_count      INT
 error_detail     VARCHAR
+
+invites  (single-use signup links)
+──────────────────────────────────────────────────────────────
+id               UUID PK
+token_hash       VARCHAR UNIQUE  ← SHA-256 of the token; the token itself is never stored
+note             VARCHAR         ← admin's label, pre-fills the display name
+created_by_id    UUID FK → frontend_users.id (SET NULL)
+created_at       TIMESTAMPTZ
+expires_at       TIMESTAMPTZ
+used_at          TIMESTAMPTZ     ← set atomically when accepted
+used_by_id       UUID FK → frontend_users.id (SET NULL)
 ```
 
 ## Auth Model
@@ -177,7 +197,8 @@ SpondBot has two completely separate authentication systems:
 - `frontend_users` table: `username` + `hashed_password` (bcrypt)
 - Login sets an `HttpOnly, Secure, SameSite=Strict` cookie (`sb_session`) containing a signed JWT (joserfc)
 - JWT payload: `sub`, `username`, `is_admin`, `linked_user_id`
-- Rate-limited to 5 login attempts per minute per IP
+- The claims are fixed when the cookie is issued, so endpoints that change them (accepting an invite, connecting your own Spond account) issue a fresh cookie; `POST /spond-accounts/me` checks the database, not the cookie, for an existing link
+- Rate-limited to 5 login attempts per minute per IP; invite accept and self-connect are limited the same way
 
 **Spond auth (API access)**
 - `users` table: email/phone + Fernet-encrypted password
@@ -185,7 +206,7 @@ SpondBot has two completely separate authentication systems:
 - Token lifetime: 24h (Spond). Proactively refreshed at 23h. Force-refreshed on 401.
 - Spond access tokens are opaque Base64 strings — passed as-is in `Authorization: Bearer`
 
-The two systems are linked by `frontend_users.linked_user_id → users.id`. An admin frontend account typically has no `linked_user_id`.
+The two systems are linked by `frontend_users.linked_user_id → users.id`. An admin frontend account typically has no `linked_user_id`. Links are created by an admin, by a member accepting an invite (`/join#<token>`), or by a signed-in login connecting its own account.
 
 ## Request Lifecycle: RSVP Submission
 
