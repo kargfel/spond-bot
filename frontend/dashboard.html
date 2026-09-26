@@ -384,8 +384,8 @@
         if (payload.is_admin) {
           document.getElementById("admin-nav-link").classList.remove("hidden");
           document.getElementById("mnav-admin").classList.remove("hidden");
-          document.querySelector(".sidebar-role").textContent = "Administrator";
-          document.querySelector(".sidebar-role").style.color = "var(--mint)";
+          document.getElementById("user-spond-label").textContent = "Administrator";
+          document.getElementById("user-spond-label").style.color = "var(--mint)";
         }
 
         if (payload.linked_user_id) {
