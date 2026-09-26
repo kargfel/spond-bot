@@ -10,7 +10,6 @@ For each active user:
 New events are inserted with user_choice='manual' and status='pending',
 so the executioner will not act on them until the user explicitly sets a choice.
 """
-import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -62,9 +61,9 @@ async def run_discovery() -> None:
 
     global last_discovery_at
     last_discovery_at = datetime.now(timezone.utc)
-    asyncio.create_task(bus.publish_admin("discovery_completed", {
+    await bus.publish_admin("discovery_completed", {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-    }))
+    })
     logger.info("=== Discovery sync complete ===")
 
 
