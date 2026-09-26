@@ -30,7 +30,7 @@ Script order on every page: `core.js`, then `app.js`, then the page script.
   "Decide later" moves to the next one without saving.
 - **Agenda**: upcoming (or past) events grouped by day, each with a Going / Not going /
   Leave to me control. Answered events show the answer instead of controls.
-- **Account menu**: profile (display name), change password, admin panel (admins only), sign out.
+- **Account menu**: profile (display name), change password, update Spond password (logins with a Spond account), admin panel (admins only), sign out.
 - **No Spond account yet**: the dashboard shows a "Connect your Spond account" form (`POST /spond-accounts/me`). The server issues a fresh session cookie with the new link, then the events load.
 
 ## Join page (`/join#<token>`)
@@ -47,7 +47,7 @@ Hash-routed views, so each one can be bookmarked:
 |---|---|
 | `#queue` | Countdown to the next armed answer, health counters (armed, no answer, failed, latency p50/p95, last sync), and every account's events ordered by fire time. Change answers inline, send an armed answer now, disarm it, or retry a failure. |
 | `#timeline` | One lane per Spond account over two weeks: registration opening (marker) to event start (bar). Select a marker for details and to change the answer. |
-| `#users` | Invite members (single-use links, shown once, with copy button), the invites list with revoke, dashboard logins and Spond accounts: add, edit, pause, delete. |
+| `#users` | Invite members (single-use links, shown once, with copy button), the invites list with revoke, dashboard logins and Spond accounts: add, edit, pause, update the stored Spond password, delete. |
 | `#log` | RSVP audit log with latency from registration opening. |
 | `#charts` | Latency scatter and daily outcomes (Chart.js from jsDelivr, with SRI), plus a per-account table that works without the chart library. |
 

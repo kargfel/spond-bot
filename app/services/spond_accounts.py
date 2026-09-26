@@ -1,10 +1,11 @@
 """
 Connecting Spond accounts: verify credentials against Spond, then build the
-encrypted `User` row. Shared by the admin endpoint, invite acceptance and
-members connecting their own account.
+encrypted `User` row. Shared by the admin endpoint, invite acceptance, members
+connecting their own account, and replacing a stored password.
 """
 import logging
 import uuid
+from datetime import datetime
 
 import aiohttp
 from fastapi import HTTPException, status
@@ -29,11 +30,10 @@ async def ensure_login_available(db: AsyncSession, login: str) -> None:
         )
 
 
-async def connect_spond_account(login: str, password: str, display_name: str | None) -> User:
+async def verify_credentials(login: str, password: str) -> tuple[str, datetime, str]:
     """
-    Sign in to Spond with the given credentials and return an unsaved `User`
-    with the password and token encrypted. Raises 401 if Spond rejects the
-    credentials and 503 if Spond cannot be reached.
+    Sign in to Spond. Returns (access token, acquired at, profile id).
+    Raises 401 if Spond rejects the credentials and 503 if it cannot be reached.
     """
     try:
         async with aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar()) as http:
@@ -50,7 +50,12 @@ async def connect_spond_account(login: str, password: str, display_name: str | N
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Could not reach Spond. Try again in a few minutes.",
         ) from exc
+    return token, acquired_at, profile_id
 
+
+async def connect_spond_account(login: str, password: str, display_name: str | None) -> User:
+    """Verify the credentials with Spond and return an unsaved, encrypted `User`."""
+    token, acquired_at, profile_id = await verify_credentials(login, password)
     return User(
         id=uuid.uuid4(),
         display_name=display_name or login.split("@")[0],

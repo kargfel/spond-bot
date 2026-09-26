@@ -265,6 +265,19 @@
       </form>
     </dialog>
 
+    <dialog id="spond-password-dialog" aria-labelledby="spond-password-title">
+      <form class="dialog-body" id="spond-password-form" novalidate>
+        <h2 id="spond-password-title">Update Spond password</h2>
+        <p>For when the member changed their password in Spond. The new password for <b class="mono" id="spond-password-login"></b> is checked with Spond before it is saved.</p>
+        <p class="form-error" role="alert" data-error hidden></p>
+        <div class="field"><label for="spond-password-new">New Spond password</label><input class="input" id="spond-password-new" type="password" autocomplete="off" /></div>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-quiet" data-close>Cancel</button>
+          <button type="submit" class="btn btn-sig" id="spond-password-submit">Update</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="spond-dialog" aria-labelledby="spond-dialog-title">
       <form class="dialog-body" id="spond-form" novalidate>
         <h2 id="spond-dialog-title">Connect Spond account</h2>
@@ -282,6 +295,6 @@
 
     <script src="core.js?v=1"></script>
     <script src="app.js?v=8"></script>
-    <script src="admin.js?v=2"></script>
+    <script src="admin.js?v=3"></script>
   </body>
 </html>

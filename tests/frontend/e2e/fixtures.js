@@ -262,6 +262,13 @@ class MockApi {
       s.me = { ...me, linked_user_id: u.id };
       return json(201, u);
     }
+    if ((hit = m(/^\/spond-accounts\/([^/]+)\/password$/)) && method === "PUT") {
+      const u = s.spondUsers.find((x) => x.id === hit[1]);
+      if (!me.is_admin && me.linked_user_id !== hit[1]) return json(403, { detail: "You can only access your own profile." });
+      if (!u) return json(404, { detail: "User not found." });
+      if (body.password === "wrong") return json(401, { detail: SPOND_REJECTED });
+      return json(200, u);
+    }
     if ((hit = m(/^\/spond-accounts\/([^/]+)$/))) {
       const u = s.spondUsers.find((x) => x.id === hit[1]);
       if (!u) return json(404, { detail: "User not found." });
