@@ -555,6 +555,32 @@
         await loadSpondUsers();
         await Promise.all([loadStats(), loadAdminEvents()]);
         setInterval(loadStats, 30_000);
+        connectAdminStream();
+      }
+
+      // ── SSE Stream ─────────────────────────────────────────────────────
+      function connectAdminStream() {
+        const es = new EventSource('/api/v1/admin/stream', { withCredentials: true });
+
+        es.addEventListener('rsvp_fired', (e) => {
+          const d = JSON.parse(e.data);
+          showToast(`RSVP ${d.outcome}: "${d.heading}" (${d.choice})`, d.outcome === 'success' ? 'success' : 'error');
+          loadStats();
+          const logView = document.getElementById('view-rsvp-log');
+          if (logView && !logView.classList.contains('hidden')) {
+            loadRsvpLog();
+          }
+        });
+
+        es.addEventListener('discovery_completed', () => {
+          loadStats();
+          const eventsView = document.getElementById('view-events');
+          if (eventsView && !eventsView.classList.contains('hidden')) {
+            loadAdminEvents();
+          }
+        });
+
+        es.onerror = () => {};
       }
 
       // ── View switching ─────────────────────────────────────────────────
