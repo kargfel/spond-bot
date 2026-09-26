@@ -62,7 +62,7 @@ async def run_discovery() -> None:
 
     global last_discovery_at
     last_discovery_at = datetime.now(timezone.utc)
-    asyncio.ensure_future(bus.publish_admin("discovery_completed", {
+    asyncio.create_task(bus.publish_admin("discovery_completed", {
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }))
     logger.info("=== Discovery sync complete ===")
