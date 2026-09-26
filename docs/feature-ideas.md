@@ -38,9 +38,30 @@ Shipped. Admin Charts tab has a latency scatter plot (Chart.js), daily success/r
 
 ---
 
+### ✅ 6. API Rename & Swagger Protection (PR #17)
+
+Shipped. Routes renamed for clarity:
+
+| Before | After |
+|--------|-------|
+| `GET/POST/PATCH/DELETE /auth/users[/{id}]` | `/accounts[/{id}]` |
+| `GET/POST/PATCH/DELETE /users[/{id}]` | `/spond-accounts[/{id}]` |
+| `PATCH /events/{id}/decision` | `PATCH /events/{id}` |
+| `POST /sync` | `POST /admin/sync` |
+
+Swagger UI (`/docs`, `/redoc`) now requires an active admin session.
+
+---
+
+### ✅ 7. User Dashboard UX (PR #20)
+
+Shipped. Dashboard sidebar shows "Managing: [Spond account name]" (or "No Spond account linked"). Change Password exposed as a direct sidebar button — no admin required.
+
+---
+
 ## User Experience
 
-### 6. Bulk Decision Setting
+### 9. Bulk Decision Setting
 
 **What:** Select multiple events and set the same choice for all at once.
 
@@ -55,7 +76,7 @@ Shipped. Admin Charts tab has a latency scatter plot (Chart.js), daily success/r
 
 ---
 
-### 7. "RSVP Now" Button
+### 10. "RSVP Now" Button
 
 **What:** Submit an RSVP immediately, bypassing `invite_time`.
 
@@ -70,7 +91,7 @@ Shipped. Admin Charts tab has a latency scatter plot (Chart.js), daily success/r
 
 ---
 
-### 8. Notifications on RSVP Completion
+### 11. Notifications on RSVP Completion
 
 **What:** Notify users when their RSVP fires (success or failure).
 
@@ -95,7 +116,7 @@ Telegram is simpler and more reliable on mobile.
 
 ---
 
-### 9. Per-Event Status Indicators
+### 12. Per-Event Status Indicators
 
 **What:** Show sniper state per event card — "Fires in 2h 15m", "Fired 3 min ago", "No decision set".
 
@@ -112,7 +133,7 @@ Telegram is simpler and more reliable on mobile.
 
 ## Resilience
 
-### 10. Configurable Retry Budget
+### 13. Configurable Retry Budget
 
 **What:** N retries with exponential backoff instead of a single 401 retry.
 
@@ -127,7 +148,7 @@ Telegram is simpler and more reliable on mobile.
 
 ---
 
-### 11. Spond API Change Detection
+### 14. Spond API Change Detection
 
 **What:** Alert admin when Spond API starts returning unexpected responses across all users.
 
@@ -142,7 +163,7 @@ Telegram is simpler and more reliable on mobile.
 
 ---
 
-### 12. Concurrent Discovery
+### 15. Concurrent Discovery
 
 **What:** Sync all users in parallel instead of sequentially.
 
@@ -163,7 +184,7 @@ await asyncio.gather(*[_sync_with_sem(u) for u in users], return_exceptions=True
 
 ## Bonus: Rule Engine
 
-### 13. Auto-Assignment Rules
+### 16. Auto-Assignment Rules
 
 **What:** Rules that automatically set `user_choice` for new events — "always accept group X", "decline if title contains 'training'", "accept only if notice > 3 days".
 
