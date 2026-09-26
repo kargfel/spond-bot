@@ -13,8 +13,10 @@ SpondBot is a self-hosted backend that automates Spond RSVP responses for multip
 │  │                          │◄──│                   │  │
 │  │  ┌──────────────────┐    │   │  users            │  │
 │  │  │  API Routers     │    │   │  frontend_users   │  │
-│  │  │  /auth  /events  │    │   │  events           │  │
-│  │  │  /users /health  │    │   └───────────────────┘  │
+│  │  │  /auth /events   │    │   │  events           │  │
+│  │  │  /accounts       │    │   │  rsvp_log         │  │
+│  │  │  /spond-accounts │    │   └───────────────────┘  │
+│  │  │  /admin /stream  │    │                          │
 │  │  └──────────────────┘    │                          │
 │  │                          │                          │
 │  │  ┌──────────────────┐    │                          │
@@ -88,6 +90,38 @@ Both paths converge on `_process_event()`, which handles status transitions, 401
 
 Fernet symmetric encryption wraps all sensitive values before they touch the database: the Spond password and the Spond access token. The `FERNET_KEY` env var is the single key. **Rotating this key requires re-entering all user credentials** — there is no migration path.
 
+## API Routes
+
+All routes are prefixed with `/api/v1/`.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/auth/login` | — | Dashboard login (sets `sb_session` cookie) |
+| `POST` | `/auth/logout` | user | Clear session cookie |
+| `GET` | `/auth/me` | user | Current user info |
+| `PATCH` | `/auth/me/password` | user | Change own password |
+| `GET` | `/accounts` | admin | List dashboard (frontend) users |
+| `POST` | `/accounts` | admin | Create dashboard user |
+| `PATCH` | `/accounts/{id}` | admin | Update dashboard user |
+| `DELETE` | `/accounts/{id}` | admin | Delete dashboard user |
+| `GET` | `/spond-accounts` | admin | List Spond credential accounts |
+| `POST` | `/spond-accounts` | admin | Create Spond account |
+| `PATCH` | `/spond-accounts/{id}` | admin | Update Spond account |
+| `DELETE` | `/spond-accounts/{id}` | admin | Delete Spond account |
+| `GET` | `/events` | user | List events for current user |
+| `PATCH` | `/events/{id}` | user | Set RSVP decision (arms/disarms sniper) |
+| `GET` | `/admin/rsvp-log` | admin | RSVP audit log |
+| `GET` | `/admin/stats` | admin | System health stats (p50/p95 timing latency) |
+| `POST` | `/admin/sync` | admin | Trigger discovery sync immediately |
+| `GET` | `/admin/charts` | admin | Latency scatter, daily outcomes, per-user breakdown |
+| `GET` | `/admin/scheduler` | admin | List armed sniper jobs |
+| `DELETE` | `/admin/scheduler/{job_id}` | admin | Cancel a sniper job |
+| `POST` | `/admin/scheduler/{job_id}/fire` | admin | Fire a sniper immediately |
+| `GET` | `/admin/stream` | admin | SSE stream for admin dashboard |
+| `GET` | `/user/stream` | user | SSE stream for user dashboard |
+
+Swagger UI is at `/docs` and ReDoc at `/redoc` — both require an active admin session.
+
 ## Data Model
 
 ```
@@ -104,21 +138,35 @@ linked_user_id UUID FK → users.id encrypted_access_token VARCHAR
 
 events
 ──────────────────────────────────────────────────────────────
-id                UUID PK
-spond_event_id    VARCHAR                         ← Spond's own event ID
-user_id           UUID FK → users.id (CASCADE DELETE)
-heading           VARCHAR
-start_timestamp   TIMESTAMPTZ
-invite_time       TIMESTAMPTZ                     ← when RSVP window opens (sniper target)
-rsvp_date         TIMESTAMPTZ                     ← RSVP deadline
-user_choice       VARCHAR  (accept|decline|manual)
-status            VARCHAR  (pending|processing|processed|failed)
-error_message     VARCHAR
-created_at        TIMESTAMPTZ
-updated_at        TIMESTAMPTZ
+id                    UUID PK
+spond_event_id        VARCHAR                         ← Spond's own event ID
+user_id               UUID FK → users.id (CASCADE DELETE)
+heading               VARCHAR
+start_timestamp       TIMESTAMPTZ
+invite_time           TIMESTAMPTZ                     ← when RSVP window opens (sniper target)
+rsvp_date             TIMESTAMPTZ                     ← RSVP deadline
+user_choice           VARCHAR  (accept|decline|manual)
+status                VARCHAR  (pending|processing|processed|failed)
+resolved_recipient_id VARCHAR                         ← cached by warmup job 10s before fire
+error_message         VARCHAR
+created_at            TIMESTAMPTZ
+updated_at            TIMESTAMPTZ
 
 UNIQUE (spond_event_id, user_id)   ← same group event = one row per user
 INDEX  (invite_time, status)       ← executioner query is instant
+
+rsvp_log  (append-only audit log)
+──────────────────────────────────────────────────────────────
+id               UUID PK
+event_id         UUID FK → events.id
+user_id          UUID FK → users.id
+spond_event_id   VARCHAR
+choice           VARCHAR  (accept|decline)
+fired_at         TIMESTAMPTZ   ← when the job began
+submitted_at     TIMESTAMPTZ   ← when the Spond API call returned
+outcome          VARCHAR  (success|retry_success|failed)
+retry_count      INT
+error_detail     VARCHAR
 ```
 
 ## Auth Model
@@ -142,21 +190,31 @@ The two systems are linked by `frontend_users.linked_user_id → users.id`. An a
 ## Request Lifecycle: RSVP Submission
 
 ```
-1. User logs into dashboard → sb_session cookie set
-2. User views event list → GET /api/v1/events
-3. User sets choice → PATCH /api/v1/events/{id}/decision (choice=accept)
-4.   DB: event.user_choice = "accept"
-5.   Sniper job scheduled at event.invite_time (DateTrigger)
-6. At invite_time:
-7.   APScheduler fires sniper → run_sniper(event_id)
-8.   ensure_fresh_token() → decrypt password → POST /auth2/login (if stale)
-9.   GET /sponds/getBulk → get raw event (for group ID)
-10.  GET /groups → resolve member ID for this user in this group
-11.  PUT /sponds/{eventId}/responses/{memberId} {"accepted": true}
-12.  DB: event.status = "processed"
-13. If 401 at step 11: force token refresh → retry once
-14. If still fails: event.status = "failed", error_message recorded
+1.  User logs into dashboard → sb_session cookie set
+2.  User views event list → GET /api/v1/events
+3.  User sets choice → PATCH /api/v1/events/{id} (choice=accept)
+4.    DB: event.user_choice = "accept"
+5.    Sniper job scheduled at event.invite_time (DateTrigger, id=sniper_{event_id})
+6.    Warmup job scheduled 10s before sniper (id=warmup_{event_id})
+7.  At invite_time - 10s:
+8.    APScheduler fires warmup → run_warmup(event_id)
+9.    GET /sponds/getBulk + GET /groups → resolve recipient_id
+10.   DB: event.resolved_recipient_id = recipient_id (cached)
+11. At invite_time:
+12.   APScheduler fires sniper → run_sniper(event_id)
+13.   ensure_fresh_token() → decrypt password → POST /auth2/login (if stale)
+14.   If resolved_recipient_id cached: skip getBulk + groups calls
+15.   Else: GET /sponds/getBulk → GET /groups → resolve member ID
+16.   PUT /sponds/{eventId}/responses/{memberId} {"accepted": true}
+17.   DB: event.status = "processed"
+18.   rsvp_log row written (outcome=success, fired_at, submitted_at)
+19. If 401 at step 16: force token refresh → retry once
+20.   rsvp_log row written (outcome=retry_success or failed)
+21. If still fails: event.status = "failed", error_message recorded
+22.   rsvp_log row written (outcome=failed, error_detail)
 ```
+
+On startup, `reschedule_pending_snipers()` in `scheduler.py` re-arms sniper + warmup jobs for all events with `status=pending`, `invite_time > now`, and an active choice — restoring precision scheduling after a restart.
 
 ## Configuration Reference
 
