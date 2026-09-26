@@ -17,12 +17,31 @@
 | `app/workers/discovery.py` | Worker A: periodic Spond event sync for all active users |
 | `app/workers/executioner.py` | Worker B: RSVP execution + sniper DateTrigger scheduling |
 | `app/workers/scheduler.py` | APScheduler setup; startup sniper recovery |
-| `app/api/auth.py` | `/auth/*` — login, logout, me, frontend user CRUD |
-| `app/api/events.py` | `/events/*` — list, get, set decision, manual sync trigger |
-| `app/api/users.py` | `/users/*` — Spond user CRUD |
+| `app/api/auth.py` | `/auth/*` — login, logout, me, change password |
+| `app/api/accounts.py` | `/accounts/*` — dashboard (frontend) user CRUD (admin only) |
+| `app/api/events.py` | `/events/*` — list, get, set RSVP decision |
+| `app/api/users.py` | `/spond-accounts/*` — Spond credential account CRUD (admin only) |
+| `app/api/admin.py` | `/admin/*` — rsvp-log, stats, sync, charts, scheduler, SSE admin stream |
+| `app/api/stream.py` | `/user/stream` — SSE user stream |
 | `app/api/deps.py` | FastAPI dependency injectors: `CurrentUser`, `DbDep`, `AdminDep` |
 | `app/schemas/` | Pydantic request/response models |
 | `frontend/` | Vanilla JS SPA — `index.html` (login), `dashboard.html`, `admin.html`, `app.js`, `style.css` |
+
+---
+
+## Recent Changes
+
+- **2026-05-21**: Login endpoint migrated to `/core/v1/auth2/login`; token format changed
+- **2026-05-21**: RSVP audit log added (`rsvp_log` table, `/admin/rsvp-log` endpoint)
+- **2026-05-21**: Admin health dashboard added (`/admin/stats`)
+- **2026-05-21**: Timing precision metrics added (p50/p95 in admin stats)
+- **2026-05-21**: Sniper race condition fixed (atomic claim via `UPDATE ... WHERE status=pending`)
+- **2026-05-21**: Warmup pre-fetch added (fires 10s before sniper, caches `resolved_recipient_id`)
+- **2026-09-24**: API routes renamed (`/auth/users` → `/accounts`, `/users` → `/spond-accounts`, `PATCH /events/{id}/decision` → `PATCH /events/{id}`, `POST /sync` → `POST /admin/sync`)
+- **2026-09-24**: Swagger UI protected behind admin session auth
+- **2026-09-24**: SSE streams added (`/admin/stream`, `/user/stream`)
+- **2026-09-24**: Admin dashboard charts + scheduler panel added
+- **2026-09-24**: User dashboard improved (Spond account indicator, Change Password button)
 
 ---
 
@@ -60,6 +79,16 @@ Spond's RSVP endpoint (`PUT /sponds/{id}/responses/{recipientId}`) requires the 
 4. Falling back to the global `profile_id` for direct invites or if the group lookup fails
 
 The primary match is `profile.id` because Spond doesn't always expose email/phone in the groups response.
+
+### RSVP endpoint
+
+```
+PUT /core/v1/sponds/{spondEventId}/responses/{recipientId}
+Body: {"accepted": true}   (or false for decline)
+Expected: 200 or 204
+```
+
+`recipientId` is the per-group member ID, **not** the global profile ID (see *Member ID vs Profile ID* above). On 401, the executioner forces a token refresh and retries once.
 
 ### getBulk chunking
 
@@ -115,7 +144,7 @@ The initial implementation tried to base64-decode the `accessToken.token` value,
 - **No Alembic migrations:** schema changes require manual SQL or recreating the DB. As the schema evolves, proper migration tooling should be added.
 - **No test suite:** there are no automated tests. Core logic (token lifecycle, sniper scheduling, upsert behavior) would benefit from unit tests.
 - **Frontend is a monolith:** `app.js` is a single large file handling all three pages. As features grow, this will become hard to maintain.
-- **No audit log:** once an RSVP fires, the only record is the `status` field. There's no history of what was submitted, when exactly, or what the API responded with.
+- **Audit log is append-only with no UI pagination:** the `rsvp_log` table records every submission attempt (outcome, timing, error detail). The `/admin/rsvp-log` endpoint currently returns all rows — add server-side pagination before the log grows large.
 - **Fernet key rotation is destructive:** changing `FERNET_KEY` invalidates all stored credentials with no migration path.
 - **Single APScheduler instance:** the scheduler lives in the same process as the web server. Under high load, a slow RSVP batch could affect HTTP response times. For scale, consider a separate worker process.
 - **Discovery is sequential per user:** `_sync_user()` calls are made in a loop, not concurrently. With many users, discovery can take a long time. Consider `asyncio.gather` with a semaphore.
