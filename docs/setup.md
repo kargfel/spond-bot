@@ -130,7 +130,7 @@ docker compose down
 docker compose up -d --build
 ```
 
-Database schema changes are applied automatically on startup via Alembic (if configured) or at the SQLAlchemy `create_all` level. Check the release notes for any manual migration steps before upgrading.
+Database schema changes are applied automatically on startup: the container runs `alembic upgrade head` before starting the server (see the `Dockerfile`). Migrations live in `migrations/versions/`.
 
 ---
 

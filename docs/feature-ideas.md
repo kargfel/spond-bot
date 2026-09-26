@@ -59,6 +59,12 @@ Shipped. Dashboard sidebar shows "Managing: [Spond account name]" (or "No Spond 
 
 ---
 
+### ✅ 8. Frontend Redesign (PR #22)
+
+Shipped. Member dashboard with a decision inbox (one undecided event at a time) and a day-grouped agenda using Going / Not going / Leave to me. Admin console with a live countdown to the next answer, a queue ordered by fire time, a per-account timeline, and users, log and charts views. Frontend logic is unit tested and the pages have Playwright e2e tests.
+
+---
+
 ## User Experience
 
 ### 9. Bulk Decision Setting
@@ -76,7 +82,9 @@ Shipped. Dashboard sidebar shows "Managing: [Spond account name]" (or "No Spond 
 
 ---
 
-### 10. "RSVP Now" Button
+### 10. "RSVP Now" Button (partly shipped)
+
+*Partly shipped in PR #22:* admins can "Send now" any armed answer from the queue (uses `POST /admin/scheduler/{job_id}/fire`). Members still have no equivalent, and events without an armed timer cannot be sent early.
 
 **What:** Submit an RSVP immediately, bypassing `invite_time`.
 
@@ -116,7 +124,9 @@ Telegram is simpler and more reliable on mobile.
 
 ---
 
-### 12. Per-Event Status Indicators
+### ✅ 12. Per-Event Status Indicators
+
+*Shipped in PR #22:* every agenda row shows its state ("Scheduled · answers in 3h 0m", "No answer set", "Sent …", "Could not be sent"), and the admin queue shows a live T-minus per event.
 
 **What:** Show sniper state per event card — "Fires in 2h 15m", "Fired 3 min ago", "No decision set".
 
