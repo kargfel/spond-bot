@@ -1315,7 +1315,17 @@
               x: { type: 'linear', ticks: { color: '#8abcab', callback: v => new Date(v).toLocaleDateString() }, grid: { color: '#285a48' } },
               y: { ticks: { color: '#8abcab' }, grid: { color: '#285a48' } },
             },
-            plugins: { legend: { labels: { color: '#d9e5e3' } } },
+            plugins: {
+              legend: { labels: { color: '#d9e5e3' } },
+              tooltip: {
+                callbacks: {
+                  label: ctx => {
+                    const date = new Date(ctx.parsed.x).toLocaleString();
+                    return `${date} — ${ctx.parsed.y} ms`;
+                  }
+                }
+              }
+            },
           }
         });
 
