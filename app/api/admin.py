@@ -8,7 +8,8 @@ GET  /admin/stats           System health stats
 POST /admin/sync            Trigger a discovery sync
 """
 import uuid
-from datetime import datetime
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Query, status
 from sqlalchemy import func, select
@@ -23,6 +24,7 @@ from app.models.event import (
 )
 from app.models.rsvp_log import RsvpLog
 from app.models.user import User
+from app.schemas.charts import ChartsResponse, DailyRate, LatencyPoint, PerUserStats
 from app.schemas.rsvp_log import RsvpLogResponse
 from app.schemas.stats import AdminStatsResponse, RecentFailure
 
@@ -162,6 +164,85 @@ async def get_admin_stats(db: AsyncSession = DbDep):
         rsvp_p50_ms=rsvp_p50_ms,
         rsvp_p95_ms=rsvp_p95_ms,
         rsvp_sample_count=rsvp_sample_count,
+    )
+
+
+@router.get(
+    "/charts",
+    response_model=ChartsResponse,
+    dependencies=[AdminDep],
+    summary="Chart data: latency scatter, daily success rate, per-user breakdown (admin only)",
+)
+async def get_charts(
+    db: AsyncSession = DbDep,
+    days: int = Query(30, le=90, description="Days of history to include"),
+    user_id: uuid.UUID | None = Query(None, description="Filter to a single Spond user"),
+):
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    q = (
+        select(RsvpLog, User.display_name, Event.invite_time, Event.heading)
+        .join(Event, RsvpLog.event_id == Event.id)
+        .join(User, RsvpLog.user_id == User.id)
+        .where(RsvpLog.fired_at >= since)
+        .order_by(RsvpLog.fired_at.asc())
+    )
+    if user_id:
+        q = q.where(RsvpLog.user_id == user_id)
+    rows = (await db.execute(q)).all()
+
+    scatter: list[LatencyPoint] = []
+    daily: dict[str, dict[str, int]] = defaultdict(lambda: {"success": 0, "failed": 0, "retry_success": 0})
+    user_stats: dict[str, dict] = defaultdict(lambda: {"total": 0, "success": 0, "latencies": []})
+
+    for log, display_name, invite_time, heading in rows:
+        if log.submitted_at and invite_time:
+            submitted_naive = log.submitted_at.replace(tzinfo=None)
+            invite_naive = invite_time.replace(tzinfo=None)
+            latency_ms = int((submitted_naive - invite_naive).total_seconds() * 1000)
+            scatter.append(LatencyPoint(
+                fired_at=log.fired_at,
+                latency_ms=latency_ms,
+                user_name=display_name,
+                heading=heading,
+            ))
+            user_stats[display_name]["latencies"].append(latency_ms)
+
+        date_str = log.fired_at.strftime("%Y-%m-%d")
+        outcome = log.outcome if log.outcome in ("success", "failed", "retry_success") else "failed"
+        daily[date_str][outcome] = daily[date_str].get(outcome, 0) + 1
+
+        user_stats[display_name]["total"] += 1
+        if log.outcome in ("success", "retry_success"):
+            user_stats[display_name]["success"] += 1
+
+    daily_rates = [
+        DailyRate(
+            date=date,
+            success=counts.get("success", 0),
+            failed=counts.get("failed", 0),
+            retry_success=counts.get("retry_success", 0),
+        )
+        for date, counts in sorted(daily.items())
+    ]
+
+    per_user: list[PerUserStats] = []
+    for uname, udata in user_stats.items():
+        lats = sorted(udata["latencies"])
+        n = len(lats)
+        p50 = lats[max(0, int(n * 0.5) - 1)] if lats else None
+        p95 = lats[max(0, int(n * 0.95) - 1)] if lats else None
+        per_user.append(PerUserStats(
+            user_name=uname,
+            total=udata["total"],
+            success=udata["success"],
+            p50_ms=p50,
+            p95_ms=p95,
+        ))
+
+    return ChartsResponse(
+        latency_scatter=scatter,
+        daily_success_rate=daily_rates,
+        per_user=sorted(per_user, key=lambda u: u.total, reverse=True),
     )
 
 
