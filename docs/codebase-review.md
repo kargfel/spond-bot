@@ -45,6 +45,7 @@
 - **2026-09-26**: Frontend redesign (PR #22): member decision inbox + agenda, admin console with queue, timeline, users, log and charts; frontend unit and e2e tests
 - **2026-09-26**: CI (GitHub Actions), pinned dependency lock, Dependabot
 - **2026-09-27**: Invite links and self-connect for members, `/health` returns 503 on failure + Docker HEALTHCHECK + optional autoheal, nightly `pg_dump` backups; CI runs migrations on Postgres 16
+- **2026-09-27**: Static file serving switched to a startup allowlist; unused `/static` mount removed (CodeQL alerts #1–#3)
 - **2026-09-27**: Stored Spond passwords can be replaced (`PUT /spond-accounts/{id}/password`, member or admin), verified with Spond first
 
 ---
@@ -140,7 +141,7 @@ The initial implementation tried to base64-decode the `accessToken.token` value,
 - **Error isolation in workers:** both `run_discovery()` and `run_executioner()` catch all exceptions at the top level and log them — APScheduler never sees an unhandled exception, so a crash in one user's sync doesn't affect others.
 - **`PROCESSING` status as a mutex:** setting `status = processing` before the RSVP call prevents the executioner and sniper from double-firing the same event if their windows overlap.
 - **Upsert preserves user decisions:** the `ON CONFLICT DO UPDATE` in discovery never touches `user_choice` — a user's pre-set decision survives a metadata refresh.
-- **Path traversal guard in file serving:** `catch_all` in `main.py` checks `is_relative_to(_FRONTEND_DIR)` before serving any file.
+- **Allowlisted file serving:** `catch_all` in `main.py` serves only web assets (`.html`, `.css`, `.js`, images) found in `frontend/` at startup; the request path is only a lookup key, never joined into a filesystem path. Everything else gets the sign-in page. (Replaced a resolve-and-check guard that CodeQL flagged as alerts #1–#3.)
 - **Timing attack mitigation in login:** `auth.py` always runs bcrypt even when the username doesn't exist.
 
 ### Known Limitations / Tech Debt

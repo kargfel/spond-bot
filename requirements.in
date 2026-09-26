@@ -30,7 +30,6 @@ aiohttp>=3.13.4
 
 # Utilities
 python-dotenv>=1.2.2
-jsondict==1.2
 
 # Testing
 pytest>=8.0.0
