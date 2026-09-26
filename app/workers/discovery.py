@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core import spond_client
+from app.core.event_bus import bus
 from app.core.spond_client import SpondAuthError, parse_event_timestamps
 from app.database import AsyncSessionLocal
 from app.models.event import CHOICE_ACCEPT, CHOICE_MANUAL, STATUS_PENDING, Event
@@ -60,6 +61,9 @@ async def run_discovery() -> None:
 
     global last_discovery_at
     last_discovery_at = datetime.now(timezone.utc)
+    await bus.publish_admin("discovery_completed", {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
     logger.info("=== Discovery sync complete ===")
 
 

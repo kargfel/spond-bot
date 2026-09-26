@@ -27,6 +27,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import spond_client
+from app.core.event_bus import bus
 from app.core.spond_client import SpondAPIError, SpondAuthError
 from app.database import AsyncSessionLocal
 from app.models.event import (
@@ -130,6 +131,19 @@ async def _process_event(event: Event) -> None:
                 "User not found or missing profile_id.",
             )
             await db.commit()
+            await bus.publish_admin("rsvp_fired", {
+                "event_id": str(db_event.id),
+                "user_id": str(db_event.user_id),
+                "heading": db_event.heading,
+                "choice": db_event.user_choice,
+                "outcome": "failed",
+                "latency_ms": None,
+            })
+            await bus.publish_user(str(db_event.user_id), "rsvp_fired", {
+                "heading": db_event.heading,
+                "choice": db_event.user_choice,
+                "outcome": "failed",
+            })
             return
 
         accepted = db_event.user_choice == CHOICE_ACCEPT
@@ -214,6 +228,35 @@ async def _process_event(event: Event) -> None:
             )
 
         await db.commit()
+
+        if db_event.status == STATUS_PROCESSED:
+            await bus.publish_admin("rsvp_fired", {
+                "event_id": str(db_event.id),
+                "user_id": str(db_event.user_id),
+                "heading": db_event.heading,
+                "choice": db_event.user_choice,
+                "outcome": "success",
+                "latency_ms": None,
+            })
+            await bus.publish_user(str(db_event.user_id), "rsvp_fired", {
+                "heading": db_event.heading,
+                "choice": db_event.user_choice,
+                "outcome": "success",
+            })
+        elif db_event.status == STATUS_FAILED:
+            await bus.publish_admin("rsvp_fired", {
+                "event_id": str(db_event.id),
+                "user_id": str(db_event.user_id),
+                "heading": db_event.heading,
+                "choice": db_event.user_choice,
+                "outcome": "failed",
+                "latency_ms": None,
+            })
+            await bus.publish_user(str(db_event.user_id), "rsvp_fired", {
+                "heading": db_event.heading,
+                "choice": db_event.user_choice,
+                "outcome": "failed",
+            })
 
 
 async def _submit_rsvp(

@@ -352,6 +352,23 @@
 
         await loadEvents();
         startAutoRefresh();
+        connectUserStream();
+      }
+
+      // ── User SSE Stream ───────────────────────────────────────────────
+      function connectUserStream() {
+        const es = new EventSource('/api/v1/user/stream', { withCredentials: true });
+
+        es.addEventListener('rsvp_fired', (e) => {
+          const d = JSON.parse(e.data);
+          const msg = d.outcome === 'success'
+            ? `Your RSVP was submitted: "${d.heading}" — ${d.choice}`
+            : `RSVP failed for "${d.heading}". Check the admin dashboard.`;
+          showToast(msg, d.outcome === 'success' ? 'success' : 'error');
+          loadEvents();
+        });
+
+        es.onerror = () => {};
       }
 
       // ── Auto-refresh Logic ─────────────────────────────────────────────
