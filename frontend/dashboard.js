@@ -321,7 +321,33 @@
     }
   }
 
+  function showSpondPassword() {
+    $("spond-password-login").textContent = state.spondUser?.login || "your Spond account";
+    $("spond-password-new").value = "";
+    openDialog("spond-password-dialog");
+  }
+
+  async function saveSpondPassword(e) {
+    e.preventDefault();
+    const password = $("spond-password-new").value;
+    if (!password) return showDialogError("spond-password-dialog", "Enter your new Spond password.");
+    const btn = $("spond-password-submit");
+    btn.disabled = true;
+    btn.textContent = "Checking with Spond…";
+    try {
+      await apiJson(`/spond-accounts/${state.me.linked_user_id}/password`, "PUT", { password });
+      closeDialog("spond-password-dialog");
+      toast("Spond password updated. SpondBot will use it from now on.", "success");
+    } catch (err) {
+      showDialogError("spond-password-dialog", err.status === 429 ? "Too many attempts. Wait a minute and try again." : err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Update";
+    }
+  }
+
   function paintIdentity() {
+    $("menu-spond-password").hidden = !state.me.linked_user_id;
     const name = state.spondUser?.display_name || state.me.username;
     $("account-btn").textContent = initials(name);
     $("menu-name").textContent = name;
@@ -334,6 +360,8 @@
     wireDialogs();
     $("menu-profile").addEventListener("click", showProfile);
     $("menu-password").addEventListener("click", showPassword);
+    $("menu-spond-password").addEventListener("click", showSpondPassword);
+    $("spond-password-form").addEventListener("submit", saveSpondPassword);
     $("menu-signout").addEventListener("click", signOut);
     $("profile-form").addEventListener("submit", saveProfile);
     $("password-form").addEventListener("submit", savePassword);

@@ -29,6 +29,11 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SpondPasswordUpdate(BaseModel):
+    """A new Spond password for an existing account (after changing it in Spond)."""
+    password: str = Field(..., min_length=1)
+
+
 class SpondConnect(BaseModel):
     """A signed-in login connecting its own Spond account."""
     login: str = Field(..., min_length=1, max_length=255)

@@ -29,6 +29,7 @@
     stats: null,
     selectedEvent: null,
     editingLogin: null,
+    passwordFor: null,
     charts: {},
   };
 
@@ -385,7 +386,10 @@
           <td>${esc(u.login)}</td>
           <td class="mono t-dim">${u.profile_id ? esc(u.profile_id.slice(0, 10)) : "–"}</td>
           <td><input type="checkbox" class="switch" role="switch" aria-label="Active" data-active="${esc(u.id)}" ${u.is_active ? "checked" : ""} /></td>
-          <td><div class="actions"><button type="button" class="btn btn-small btn-danger" data-delete-spond="${esc(u.id)}">Delete</button></div></td>
+          <td><div class="actions">
+            <button type="button" class="btn btn-small" data-spond-password="${esc(u.id)}">Update password</button>
+            <button type="button" class="btn btn-small btn-danger" data-delete-spond="${esc(u.id)}">Delete</button>
+          </div></td>
         </tr>`).join("")
       : '<tr><td colspan="5" class="empty-note">No Spond accounts connected.</td></tr>';
   }
@@ -518,6 +522,36 @@
     if ((await guarded(() => apiJson(`/invites/${id}`, "DELETE"))) !== FAILED) {
       toast("Invite revoked.", "success");
       loadUsersView();
+    }
+  }
+
+  function openSpondPasswordDialog(id) {
+    const u = state.spondUsers.find((x) => x.id === id);
+    if (!u) return;
+    state.passwordFor = u;
+    $("spond-password-title").textContent = `Update Spond password for ${u.display_name}`;
+    $("spond-password-login").textContent = u.login;
+    $("spond-password-new").value = "";
+    openDialog("spond-password-dialog");
+  }
+
+  async function submitSpondPassword(ev) {
+    ev.preventDefault();
+    const u = state.passwordFor;
+    const password = $("spond-password-new").value;
+    if (!password) return showDialogError("spond-password-dialog", "Enter the new Spond password.");
+    const btn = $("spond-password-submit");
+    btn.disabled = true;
+    btn.textContent = "Checking with Spond…";
+    try {
+      await apiJson(`/spond-accounts/${u.id}/password`, "PUT", { password });
+      closeDialog("spond-password-dialog");
+      toast(`Spond password updated for ${u.display_name}.`, "success");
+    } catch (err) {
+      showDialogError("spond-password-dialog", err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Update";
     }
   }
 
@@ -714,6 +748,7 @@
     $("invite-copy").addEventListener("click", copyInvite);
     $("login-form").addEventListener("submit", submitLogin);
     $("spond-form").addEventListener("submit", submitSpond);
+    $("spond-password-form").addEventListener("submit", submitSpondPassword);
 
     document.querySelector(".main").addEventListener("click", (e) => {
       const t = (sel) => e.target.closest(sel);
@@ -730,6 +765,7 @@
       if ((el = t("[data-edit-login]"))) return openLoginDialog(state.accounts.find((a) => a.id === el.dataset.editLogin));
       if ((el = t("[data-delete-login]"))) return deleteLogin(el.dataset.deleteLogin);
       if ((el = t("[data-delete-spond]"))) return deleteSpond(el.dataset.deleteSpond);
+      if ((el = t("[data-spond-password]"))) return openSpondPasswordDialog(el.dataset.spondPassword);
       if ((el = t("[data-revoke-invite]"))) return revokeInvite(el.dataset.revokeInvite);
     });
     document.querySelector(".main").addEventListener("change", (e) => {

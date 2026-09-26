@@ -246,7 +246,7 @@ See `docs/codebase-review.md` for the full history of known API changes.
 
 **"Login failed" in logs**
 
-The stored password may be wrong (for example, the member changed it in Spond), or Spond rejected the credentials. A stored Spond password cannot be edited yet. Delete the Spond account (admin → Users → Spond accounts → Delete) and connect it again, or send the member an invite. Deleting removes that account's events and answers; the next sync brings the events back with no answer set.
+The stored password may be wrong (for example, the member changed it in Spond), or Spond rejected the credentials. Enter the new password: the member uses **Account menu → Update Spond password** on their dashboard, or an admin uses **Users → Spond accounts → Update password**. SpondBot checks it with Spond before saving, and events and answers are kept. Failed answers can then be retried from the dashboard.
 
 **Events not appearing in dashboard**
 

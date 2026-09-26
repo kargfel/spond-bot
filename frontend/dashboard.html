@@ -20,6 +20,7 @@
           <div class="menu-head"><b id="menu-name">…</b><span id="menu-sub"></span></div>
           <button role="menuitem" type="button" id="menu-profile">Profile</button>
           <button role="menuitem" type="button" id="menu-password">Change password</button>
+          <button role="menuitem" type="button" id="menu-spond-password" hidden>Update Spond password</button>
           <a role="menuitem" href="/admin" id="menu-admin" hidden>Admin panel</a>
           <button role="menuitem" type="button" id="menu-signout">Sign out</button>
         </div>
@@ -120,8 +121,24 @@
       </form>
     </dialog>
 
+    <dialog id="spond-password-dialog" aria-labelledby="spond-password-title">
+      <form class="dialog-body" id="spond-password-form" novalidate>
+        <h2 id="spond-password-title">Update Spond password</h2>
+        <p class="hint">Changed your password in the Spond app? Enter the new one for <b id="spond-password-login"></b>. SpondBot checks it with Spond before saving.</p>
+        <p class="form-error" role="alert" data-error hidden></p>
+        <div class="field">
+          <label for="spond-password-new">New Spond password</label>
+          <input id="spond-password-new" class="input" type="password" autocomplete="off" />
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-quiet" data-close>Cancel</button>
+          <button type="submit" class="btn btn-primary" id="spond-password-submit">Update</button>
+        </div>
+      </form>
+    </dialog>
+
     <script src="core.js?v=1"></script>
     <script src="app.js?v=8"></script>
-    <script src="dashboard.js?v=2"></script>
+    <script src="dashboard.js?v=3"></script>
   </body>
 </html>

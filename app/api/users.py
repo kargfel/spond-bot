@@ -9,6 +9,7 @@ POST   /spond-accounts/me        Connect a Spond account to your own login (any 
 GET    /spond-accounts           List all users (admin only)
 GET    /spond-accounts/{id}      Get a single user (admin or own)
 PATCH  /spond-accounts/{id}      Update display_name or is_active (admin or own)
+PUT    /spond-accounts/{id}/password  Replace the stored Spond password, verified with Spond (admin or own)
 DELETE /spond-accounts/{id}      Remove user and cascade-delete events (admin only)
 """
 import logging
@@ -20,11 +21,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminDep, CurrentUser, DbDep
 from app.core.rate_limit import limiter
+from app.core.security import encrypt
 from app.core.session import set_session_cookie
 from app.models.frontend_user import FrontendUser
 from app.models.user import User
-from app.schemas.user import SpondConnect, UserCreate, UserResponse, UserUpdate
-from app.services.spond_accounts import connect_spond_account, ensure_login_available
+from app.schemas.user import SpondConnect, SpondPasswordUpdate, UserCreate, UserResponse, UserUpdate
+from app.services.spond_accounts import connect_spond_account, ensure_login_available, verify_credentials
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/spond-accounts", tags=["Spond Accounts"])
@@ -158,6 +160,47 @@ async def update_user(
 
     await db.commit()
     await db.refresh(user)
+    return user
+
+
+@router.put(
+    "/{user_id}/password",
+    response_model=UserResponse,
+    summary="Replace the stored Spond password (admin or own)",
+)
+@limiter.limit("5/minute")
+async def update_spond_password(
+    request: Request,
+    user_id: uuid.UUID,
+    payload: SpondPasswordUpdate,
+    db: AsyncSession = DbDep,
+    current_user: dict = CurrentUser,
+):
+    """
+    For when a member changed their password in Spond. The new password is
+    verified by signing in to Spond; nothing is stored unless that succeeds.
+    Refuses the change if the login now belongs to a different Spond profile,
+    so an account can never be silently swapped for another person's.
+    """
+    _assert_own_or_admin(user_id, current_user)
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    token, acquired_at, profile_id = await verify_credentials(user.login, payload.password)
+    if user.profile_id and profile_id != user.profile_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This Spond login now belongs to a different Spond profile. Delete the account and connect it again.",
+        )
+
+    user.encrypted_password = encrypt(payload.password)
+    user.encrypted_access_token = encrypt(token)
+    user.token_acquired_at = acquired_at
+    user.profile_id = profile_id
+    await db.commit()
+    await db.refresh(user)
+    logger.info("Spond password updated for %r by %r.", user.login, current_user.get("username"))
     return user
 
 

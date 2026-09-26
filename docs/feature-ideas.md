@@ -81,6 +81,10 @@ Shipped. `/api/v1/health` returns 503 when the database or scheduler is down; th
 
 Shipped. Compose `backup` service: `pg_dump` every 24h with 14-day retention, restore steps in `docs/setup.md`.
 
+### ✅ 20. Update Stored Spond Password
+
+Shipped. Members (account menu) and admins (Spond accounts table) can replace a stored Spond password after it changed in Spond. It is verified with Spond before saving; events and answers are kept.
+
 ---
 
 ## User Experience

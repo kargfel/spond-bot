@@ -109,6 +109,7 @@ All routes are prefixed with `/api/v1/`.
 | `POST` | `/spond-accounts/me` | user | Connect a Spond account to your own unlinked login; re-issues the session cookie |
 | `GET` | `/spond-accounts/{id}` | admin or own | Get one Spond account |
 | `PATCH` | `/spond-accounts/{id}` | admin or own | Update display name or active flag |
+| `PUT` | `/spond-accounts/{id}/password` | admin or own | Replace the stored Spond password; verified with Spond first, refused if the login now belongs to another Spond profile (rate-limited) |
 | `DELETE` | `/spond-accounts/{id}` | admin | Delete Spond account (cascades to its events) |
 | `POST` | `/invites` | admin | Create a single-use invite; returns the token once |
 | `GET` | `/invites` | admin | List invites with status (pending, used, expired) |

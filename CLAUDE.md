@@ -62,7 +62,7 @@ app/
   api/
     auth.py                /auth/* (login, logout, me, change own password)
     accounts.py            /accounts/* (dashboard logins, admin only)
-    users.py               /spond-accounts/* (Spond account CRUD; POST /me = connect own account)
+    users.py               /spond-accounts/* (Spond account CRUD; POST /me = connect own account; PUT /{id}/password)
     invites.py             /invites/* (admin create/list/revoke; public check/accept)
     events.py              /events/* (list, set decision) and /health
     admin.py               /admin/* (stats, charts, RSVP log, scheduler jobs, sync)
