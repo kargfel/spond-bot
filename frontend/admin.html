@@ -934,7 +934,7 @@
               <div class="user-card-avatar">${av}</div>
               <div class="user-card-body">
                 <div class="user-card-name">${escHtml(u.username)}</div>
-                ${linkedName ? `<div class="text-muted" style="font-size:0.7rem;margin-top:2px">Managing: ${escHtml(linkedName)}</div>` : ''}
+                ${linkedName ? `<div class="user-card-meta"><span class="user-card-detail">Managing: ${escHtml(linkedName)}</span></div>` : ''}
                 <div class="user-card-meta">
                   ${u.is_admin ? '<span class="badge badge-accept">Admin</span>' : '<span class="badge badge-manual">User</span>'}
                 </div>
