@@ -6,6 +6,11 @@
     <title>SpondBot — Admin</title>
     <meta name="description" content="SpondBot administration dashboard." />
     <link rel="stylesheet" href="style.css?v=6" />
+    <script
+      src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
+      integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g"
+      crossorigin="anonymous"
+    ></script>
     <style>
       /* Admin-specific local overrides — only things style.css can't do */
       .admin-section {
@@ -66,6 +71,13 @@
           >
             ${ICON.shield} RSVP Log
           </button>
+          <button
+            class="sidebar-item"
+            data-view="stats-charts"
+            onclick="switchView('stats-charts', this)"
+          >
+            📊 Charts
+          </button>
           <button class="sidebar-item" data-view="sync" onclick="doSync()">
             ${ICON.sync} Trigger Sync
           </button>
@@ -117,6 +129,10 @@
               —
             </div>
             <div class="stat-label">Pending</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stat-processed" style="color: var(--status-green)">—</div>
+            <div class="stat-label">Processed</div>
           </div>
           <div class="stat-card">
             <div
@@ -269,6 +285,52 @@
           <div id="rsvp-log-wrap">
             <div class="flex-center" style="padding: 2.5rem">
               <span class="spinner" style="width: 22px; height: 22px; border-width: 3px"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Charts & Scheduler View ──────────────────────────────── -->
+        <div id="view-stats-charts" class="admin-section hidden">
+          <div class="page-header" style="margin-bottom: 1rem">
+            <h1 class="page-title">Charts & Scheduler</h1>
+            <div style="display:flex;gap:0.5rem">
+              <select id="chart-days" class="input" onchange="loadCharts()" style="width:auto">
+                <option value="7">Last 7 days</option>
+                <option value="30" selected>Last 30 days</option>
+                <option value="90">Last 90 days</option>
+              </select>
+              <select id="chart-user" class="input" onchange="loadCharts()" style="width:auto">
+                <option value="">All Users</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Latency scatter -->
+          <div class="stat-card" style="margin-bottom:1.5rem;padding:1.5rem">
+            <div class="section-title" style="margin-bottom:1rem">RSVP Latency (ms after invite_time)</div>
+            <canvas id="chart-latency" height="120"></canvas>
+          </div>
+
+          <!-- Daily success rate -->
+          <div class="stat-card" style="margin-bottom:1.5rem;padding:1.5rem">
+            <div class="section-title" style="margin-bottom:1rem">Daily RSVP Outcomes</div>
+            <canvas id="chart-daily" height="120"></canvas>
+          </div>
+
+          <!-- Per-user table -->
+          <div class="stat-card" style="margin-bottom:1.5rem;padding:1.5rem">
+            <div class="section-title" style="margin-bottom:1rem">Per-User Breakdown</div>
+            <div id="chart-per-user-table"></div>
+          </div>
+
+          <!-- Scheduler panel -->
+          <div class="page-header" style="margin:2rem 0 1rem">
+            <h2 class="page-title" style="font-size:1.1rem">Armed Snipers</h2>
+            <button class="btn btn-outline btn-sm" onclick="loadScheduler()">🔄 Refresh</button>
+          </div>
+          <div id="scheduler-list">
+            <div class="flex-center" style="padding:2rem">
+              <span class="spinner" style="width:22px;height:22px;border-width:3px"></span>
             </div>
           </div>
         </div>
@@ -580,6 +642,13 @@
           }
         });
 
+        es.addEventListener('scheduler_changed', () => {
+          const chartsView = document.getElementById('view-stats-charts');
+          if (chartsView && !chartsView.classList.contains('hidden')) {
+            loadScheduler();
+          }
+        });
+
         es.onerror = () => {};
       }
 
@@ -588,10 +657,12 @@
         document.getElementById('view-events').classList.toggle('hidden', view !== 'events');
         document.getElementById('view-users').classList.toggle('hidden', view !== 'users');
         document.getElementById('view-rsvp-log').classList.toggle('hidden', view !== 'rsvp-log');
+        document.getElementById('view-stats-charts').classList.toggle('hidden', view !== 'stats-charts');
         document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
         if (btn) btn.classList.add('active');
         if (view === 'users') loadUsersView();
         if (view === 'rsvp-log') loadRsvpLog();
+        if (view === 'stats-charts') { loadCharts(); loadScheduler(); }
       }
 
       // ── Stats (from /admin/stats) ──────────────────────────────────────
@@ -605,6 +676,7 @@
           document.getElementById('stat-events').textContent = d.total_events;
           document.getElementById('stat-pending').textContent = d.events_pending;
           document.getElementById('stat-failed').textContent = d.events_failed;
+          document.getElementById('stat-processed').textContent = d.events_processed ?? '—';
 
           renderLastDiscovery(d.last_discovery_at);
           renderRecentFailures(d.recent_failures);
@@ -1186,6 +1258,167 @@
               </tbody>
             </table>
           </div>`;
+      }
+
+      // ── Charts ────────────────────────────────────────────────────────
+      let _latencyChart = null;
+      let _dailyChart = null;
+
+      async function loadCharts() {
+        // Populate user filter on first load
+        const userSel = document.getElementById('chart-user');
+        if (userSel.options.length === 1) {
+          try {
+            const spondUsers = await api('/spond-accounts');
+            const users = await spondUsers.json();
+            users.forEach(u => {
+              const opt = document.createElement('option');
+              opt.value = u.id;
+              opt.textContent = u.display_name;
+              userSel.appendChild(opt);
+            });
+          } catch {}
+        }
+
+        const days = document.getElementById('chart-days').value;
+        const userId = document.getElementById('chart-user').value;
+        let url = `/admin/charts?days=${days}`;
+        if (userId) url += `&user_id=${userId}`;
+
+        let data;
+        try {
+          const res = await api(url);
+          if (!res.ok) return;
+          data = await res.json();
+        } catch { return; }
+
+        // Latency scatter
+        const latencyCtx = document.getElementById('chart-latency').getContext('2d');
+        if (_latencyChart) _latencyChart.destroy();
+        _latencyChart = new Chart(latencyCtx, {
+          type: 'scatter',
+          data: {
+            datasets: [{
+              label: 'Latency (ms)',
+              data: data.latency_scatter.map(p => ({ x: new Date(p.fired_at).getTime(), y: p.latency_ms })),
+              backgroundColor: 'rgba(64,138,113,0.6)',
+              pointRadius: 4,
+            }]
+          },
+          options: {
+            responsive: true,
+            scales: {
+              x: { type: 'linear', ticks: { color: '#8abcab', callback: v => new Date(v).toLocaleDateString() }, grid: { color: '#285a48' } },
+              y: { ticks: { color: '#8abcab' }, grid: { color: '#285a48' } },
+            },
+            plugins: { legend: { labels: { color: '#d9e5e3' } } },
+          }
+        });
+
+        // Daily bar chart
+        const dailyCtx = document.getElementById('chart-daily').getContext('2d');
+        if (_dailyChart) _dailyChart.destroy();
+        _dailyChart = new Chart(dailyCtx, {
+          type: 'bar',
+          data: {
+            labels: data.daily_success_rate.map(d => d.date),
+            datasets: [
+              { label: 'Success', data: data.daily_success_rate.map(d => d.success), backgroundColor: 'rgba(74,222,128,0.7)' },
+              { label: 'Retry', data: data.daily_success_rate.map(d => d.retry_success), backgroundColor: 'rgba(251,146,60,0.7)' },
+              { label: 'Failed', data: data.daily_success_rate.map(d => d.failed), backgroundColor: 'rgba(248,113,113,0.7)' },
+            ]
+          },
+          options: {
+            responsive: true,
+            scales: {
+              x: { stacked: true, ticks: { color: '#8abcab' }, grid: { color: '#285a48' } },
+              y: { stacked: true, ticks: { color: '#8abcab' }, grid: { color: '#285a48' } },
+            },
+            plugins: { legend: { labels: { color: '#d9e5e3' } } },
+          }
+        });
+
+        // Per-user table
+        const tableEl = document.getElementById('chart-per-user-table');
+        if (!data.per_user.length) {
+          tableEl.innerHTML = '<p class="text-muted text-sm">No data.</p>';
+          return;
+        }
+        tableEl.innerHTML = `
+          <table class="data-table">
+            <thead><tr>
+              <th>User</th><th>Total RSVPs</th><th>Success</th><th>p50 (ms)</th><th>p95 (ms)</th>
+            </tr></thead>
+            <tbody>
+              ${data.per_user.map(u => `
+                <tr>
+                  <td>${escHtml(u.user_name)}</td>
+                  <td>${u.total}</td>
+                  <td>${u.success}</td>
+                  <td>${u.p50_ms ?? '—'}</td>
+                  <td>${u.p95_ms ?? '—'}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>`;
+      }
+
+      // ── Scheduler panel ───────────────────────────────────────────────
+      async function loadScheduler() {
+        const el = document.getElementById('scheduler-list');
+        let jobs;
+        try {
+          const res = await api('/admin/scheduler');
+          if (!res.ok) return;
+          jobs = await res.json();
+        } catch { return; }
+
+        if (!jobs.length) {
+          el.innerHTML = '<p class="text-muted text-sm" style="padding:1rem">No snipers currently armed.</p>';
+          return;
+        }
+        el.innerHTML = `
+          <table class="data-table">
+            <thead><tr>
+              <th>Event</th><th>User</th><th>Fire At</th><th>Countdown</th><th>Actions</th>
+            </tr></thead>
+            <tbody>
+              ${jobs.map(j => `
+                <tr>
+                  <td>${escHtml(j.heading ?? j.event_id)}</td>
+                  <td>${escHtml(j.user_name ?? '—')}</td>
+                  <td>${new Date(j.fire_at).toLocaleString()}</td>
+                  <td>${fmtCountdown(j.countdown_s)}</td>
+                  <td style="display:flex;gap:0.25rem">
+                    <button class="btn btn-ghost btn-sm" onclick="cancelJob('${escHtml(j.job_id)}')">Cancel</button>
+                    <button class="btn btn-outline btn-sm" onclick="fireJob('${escHtml(j.job_id)}')">Fire Now</button>
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>`;
+      }
+
+      function fmtCountdown(s) {
+        if (s < 60) return `${s}s`;
+        if (s < 3600) return `${Math.floor(s/60)}m ${s%60}s`;
+        return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+      }
+
+      async function cancelJob(jobId) {
+        if (!confirm('Cancel this sniper? The event choice remains set but no RSVP will be auto-submitted.')) return;
+        try {
+          await api(`/admin/scheduler/${jobId}`, 'DELETE');
+          showToast('Sniper cancelled.', 'info');
+        } catch {}
+        loadScheduler();
+      }
+
+      async function fireJob(jobId) {
+        if (!confirm('Fire this sniper immediately? The RSVP will be submitted right now.')) return;
+        try {
+          await api(`/admin/scheduler/${jobId}/fire`, 'POST');
+          showToast('Sniper fired.', 'success');
+        } catch {}
+        loadScheduler();
       }
 
       // ── Utils ──────────────────────────────────────────────────────────
