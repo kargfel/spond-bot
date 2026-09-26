@@ -15,7 +15,6 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import select
@@ -121,10 +120,6 @@ app.include_router(invites_router.router, prefix="/api/v1")
 
 # ── Frontend Serving ────────────────────────────────────────────────
 
-# Mount frontend directory for static assets (css, js, images…)
-if _FRONTEND_DIR.is_dir():
-    app.mount("/static", StaticFiles(directory=str(_FRONTEND_DIR)), name="static")
-
 
 @app.get("/")
 @app.get("/login")
@@ -161,19 +156,25 @@ async def protected_redoc(current_user: dict = AdminDep):
     return get_redoc_html(openapi_url="/openapi.json", title="SpondBot API")
 
 
-# Catch-all for assets (css, js) — sandboxed to the frontend dir
+# Web assets the catch-all may serve, collected once at startup. A request path
+# is only ever used as a key into this map, never to build a filesystem path,
+# so nothing outside it (source, README, dotfiles) can be reached.
+_ASSET_SUFFIXES = {".html", ".css", ".js", ".svg", ".png", ".ico", ".webmanifest"}
+_ASSETS: dict[str, Path] = (
+    {
+        p.relative_to(_FRONTEND_DIR).as_posix(): p
+        for p in _FRONTEND_DIR.rglob("*")
+        if p.is_file() and p.suffix in _ASSET_SUFFIXES and not p.name.startswith(".")
+    }
+    if _FRONTEND_DIR.is_dir()
+    else {}
+)
+
+
+# Catch-all for assets (css, js); anything unknown gets the sign-in page.
 @app.get("/{path:path}")
 async def catch_all(path: str):
-    # Resolve to an absolute path and verify it stays inside frontend/
-    try:
-        target = (_FRONTEND_DIR / path).resolve()
-    except Exception:
+    asset = _ASSETS.get(path)
+    if asset is None:
         return FileResponse(_FRONTEND_DIR / "index.html")
-
-    # Reject any path that escapes the frontend directory (path traversal)
-    if not target.is_relative_to(_FRONTEND_DIR):
-        return FileResponse(_FRONTEND_DIR / "index.html")
-
-    if target.is_file():
-        return FileResponse(target)
-    return FileResponse(_FRONTEND_DIR / "index.html")
+    return FileResponse(asset)
