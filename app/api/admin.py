@@ -7,11 +7,12 @@ GET  /admin/rsvp-log        Paginated RSVP audit log
 GET  /admin/stats           System health stats
 POST /admin/sync            Trigger a discovery sync
 """
+import contextlib
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +26,7 @@ from app.models.event import (
 from app.models.rsvp_log import RsvpLog
 from app.models.user import User
 from app.schemas.charts import ChartsResponse, DailyRate, LatencyPoint, PerUserStats
+from app.schemas.scheduler import ScheduledJob
 from app.schemas.rsvp_log import RsvpLogResponse
 from app.schemas.stats import AdminStatsResponse, RecentFailure
 
@@ -245,6 +247,96 @@ async def get_charts(
         daily_success_rate=daily_rates,
         per_user=sorted(per_user, key=lambda u: u.total, reverse=True),
     )
+
+
+@router.get(
+    "/scheduler",
+    response_model=list[ScheduledJob],
+    dependencies=[AdminDep],
+    summary="List armed sniper jobs (admin only)",
+)
+async def list_scheduler_jobs(db: AsyncSession = DbDep):
+    """Returns all currently-scheduled sniper jobs sorted by fire time."""
+    from app.workers.scheduler import get_scheduler
+
+    scheduler = get_scheduler()
+    now = datetime.now(timezone.utc)
+    result: list[ScheduledJob] = []
+
+    for job in scheduler.get_jobs():
+        if not job.id.startswith("sniper_"):
+            continue
+        try:
+            event_id = uuid.UUID(job.id[len("sniper_"):])
+        except ValueError:
+            continue
+        fire_at = getattr(job, "next_run_time", None)
+        if not fire_at:
+            continue
+
+        event = await db.get(Event, event_id)
+        if not event:
+            continue
+        user = await db.get(User, event.user_id)
+
+        result.append(ScheduledJob(
+            job_id=job.id,
+            event_id=event_id,
+            heading=event.heading,
+            user_name=user.display_name if user else None,
+            fire_at=fire_at,
+            countdown_s=max(0, int((fire_at - now).total_seconds())),
+        ))
+
+    return sorted(result, key=lambda j: j.fire_at)
+
+
+@router.delete(
+    "/scheduler/{job_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[AdminDep],
+    summary="Cancel an armed sniper job (admin only)",
+)
+async def cancel_scheduler_job(job_id: str):
+    """Removes the sniper (and its warmup job) from APScheduler. Idempotent."""
+    from apscheduler.jobstores.base import JobLookupError
+    from app.workers.scheduler import get_scheduler
+
+    scheduler = get_scheduler()
+    with contextlib.suppress(JobLookupError):
+        scheduler.remove_job(job_id)
+    if job_id.startswith("sniper_"):
+        warmup_id = "warmup_" + job_id[len("sniper_"):]
+        with contextlib.suppress(JobLookupError):
+            scheduler.remove_job(warmup_id)
+
+
+@router.post(
+    "/scheduler/{job_id}/fire",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[AdminDep],
+    summary="Fire a sniper job immediately (admin only)",
+)
+async def fire_scheduler_job(job_id: str):
+    """Cancels the scheduled job and fires the sniper immediately."""
+    import asyncio
+    from apscheduler.jobstores.base import JobLookupError
+    from app.workers.executioner import run_sniper
+    from app.workers.scheduler import get_scheduler
+
+    if not job_id.startswith("sniper_"):
+        raise HTTPException(status_code=400, detail="job_id must start with 'sniper_'.")
+    try:
+        event_id = uuid.UUID(job_id[len("sniper_"):])
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job_id format.")
+
+    scheduler = get_scheduler()
+    with contextlib.suppress(JobLookupError):
+        scheduler.remove_job(job_id)
+
+    asyncio.create_task(run_sniper(event_id))
+    return {"detail": f"Sniper for event {event_id} fired immediately."}
 
 
 @router.post(
