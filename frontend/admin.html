@@ -1406,7 +1406,8 @@
       async function cancelJob(jobId) {
         if (!confirm('Cancel this sniper? The event choice remains set but no RSVP will be auto-submitted.')) return;
         try {
-          await api(`/admin/scheduler/${jobId}`, 'DELETE');
+          const res = await api(`/admin/scheduler/${jobId}`, 'DELETE');
+          if (!res.ok) { showToast('Failed to cancel sniper.', 'error'); return; }
           showToast('Sniper cancelled.', 'info');
         } catch {}
         loadScheduler();
@@ -1415,7 +1416,8 @@
       async function fireJob(jobId) {
         if (!confirm('Fire this sniper immediately? The RSVP will be submitted right now.')) return;
         try {
-          await api(`/admin/scheduler/${jobId}/fire`, 'POST');
+          const res = await api(`/admin/scheduler/${jobId}/fire`, 'POST');
+          if (!res.ok) { showToast('Failed to fire sniper.', 'error'); return; }
           showToast('Sniper fired.', 'success');
         } catch {}
         loadScheduler();
