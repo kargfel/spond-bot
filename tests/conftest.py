@@ -22,6 +22,7 @@ from app.api import deps  # noqa: E402
 import app.models.rsvp_log  # noqa: F401 — ensures rsvp_log table is registered in Base.metadata
 import app.models.user  # noqa: F401
 import app.models.event  # noqa: F401
+import app.models.invite  # noqa: F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -74,3 +75,55 @@ async def admin_client(test_db):
         yield client
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """Rate limits are per client IP and kept in memory; start every test clean."""
+    from app.core.rate_limit import limiter
+
+    limiter.reset()
+    yield
+
+
+@pytest.fixture
+def client_as(test_db):
+    """
+    Factory for an API client with a given session (claims dict), or anonymous
+    when claims is None. Usage: `async with client_as({...}) as client:`.
+    """
+    from contextlib import asynccontextmanager
+
+    from app.main import app
+
+    @asynccontextmanager
+    async def _make(claims: dict | None):
+        async def override_get_db():
+            yield test_db
+
+        app.dependency_overrides[get_db] = override_get_db
+        if claims is not None:
+            async def override_current_user():
+                return claims
+
+            app.dependency_overrides[deps._get_current_user] = override_current_user
+        try:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                yield client
+        finally:
+            app.dependency_overrides.clear()
+
+    return _make
+
+
+@pytest.fixture
+def spond_api():
+    """Patch the Spond login used when verifying credentials. Yields the login mock."""
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, patch
+
+    with patch("app.services.spond_accounts.spond_client.login", new_callable=AsyncMock) as login, \
+         patch("app.services.spond_accounts.spond_client.get_profile_id", new_callable=AsyncMock) as profile:
+        login.return_value = ("spond-token", datetime.now(timezone.utc))
+        profile.return_value = "PROFILE-123"
+        yield login

@@ -36,31 +36,45 @@ SpondBot is a self-hosted multi-user automation backend that submits Spond RSVP 
 
 ```
 app/
-  main.py                  FastAPI app, lifespan, static file serving
+  main.py                  FastAPI app, lifespan, page routes (/, /dashboard, /admin, /join)
   config.py                All env vars via pydantic-settings
   database.py              SQLAlchemy async engine + session factory
   core/
     spond_client.py        Stateless Spond API functions (login, events, RSVP)
-    security.py            Fernet encrypt/decrypt helpers
+    security.py            Fernet encrypt/decrypt + bcrypt helpers
     jwt.py                 joserfc JWT creation/validation
+    session.py             Session cookie issue/clear (re-issue when claims change)
+    rate_limit.py          Shared slowapi limiter (per client IP)
+    event_bus.py           In-process pub/sub feeding the SSE streams
   models/
     user.py                Spond account row (encrypted creds + token)
-    frontend_user.py       Dashboard login account (bcrypt hash)
+    frontend_user.py       Dashboard login account (bcrypt hash, optional linked_user_id)
     event.py               One event-per-user row (choice + status)
+    rsvp_log.py            Audit log of every RSVP attempt
+    invite.py              Single-use invite link (token stored as SHA-256 hash)
   services/
     auth.py                ensure_fresh_token() — token lifecycle
+    spond_accounts.py      Verify Spond credentials + build encrypted User row
   workers/
     discovery.py           Worker A: sync events from Spond for all users
     executioner.py         Worker B: fire RSVPs + sniper DateTrigger helpers
     scheduler.py           APScheduler setup + startup sniper recovery
   api/
-    auth.py                /auth/* endpoints (login, logout, user management)
-    events.py              /events/* endpoints (list, decision, sync trigger)
-    users.py               /users/* endpoints (Spond user CRUD)
+    auth.py                /auth/* (login, logout, me, change own password)
+    accounts.py            /accounts/* (dashboard logins, admin only)
+    users.py               /spond-accounts/* (Spond account CRUD; POST /me = connect own account)
+    invites.py             /invites/* (admin create/list/revoke; public check/accept)
+    events.py              /events/* (list, set decision) and /health
+    admin.py               /admin/* (stats, charts, RSVP log, scheduler jobs, sync)
+    stream.py              /admin/stream and /user/stream (SSE)
     deps.py                FastAPI dependency injectors (CurrentUser, DbDep, AdminDep)
   schemas/                 Pydantic request/response models
+scripts/
+  healthcheck.py           Docker HEALTHCHECK probe (exit 0 only on HTTP 200)
+  backup.sh                pg_dump loop/once/check for the compose `backup` service
 frontend/                  Static pages, no build step (served by app/main.py)
   index.html               Sign-in page
+  join.html/.js            Invite signup: create login + connect Spond account
   dashboard.html/.js       Member dashboard: decision inbox + day-grouped agenda
   admin.html/.js           Admin console: queue, timeline, users, log, charts
   core.js                  Pure view logic (event state, grouping, formatting); unit tested
@@ -94,7 +108,7 @@ Member-facing labels: `accept`/`decline`/`manual` are shown as Going / Not going
 
 ```
 Discovery fetches event → upsert to DB (choice=manual, status=pending)
-User sets choice via PATCH /events/{id}/decision
+User sets choice via PATCH /events/{id}
   → sniper scheduled at invite_time (DateTrigger)
   → fallback: executioner polls every minute
 At invite_time:

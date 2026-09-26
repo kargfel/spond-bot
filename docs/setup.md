@@ -36,10 +36,29 @@ SITE_DOMAIN=localhost
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=changeme
 
-# Optional tuning
+# Optional tuning (see the reference below)
 DISCOVERY_INTERVAL_MINUTES=60
 TZ=Europe/Berlin
 ```
+
+#### Environment variable reference
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DATABASE_URL` | required | SQLAlchemy async URL, e.g. `postgresql+asyncpg://spond:…@db:5432/spond_bot` |
+| `DB_PASSWORD` | required (compose) | Password for the `db` service; must match `DATABASE_URL`. Also used by the `backup` service |
+| `FERNET_KEY` | required | Encrypts stored Spond passwords and tokens. Back it up separately from the database |
+| `API_KEY` | required | Bearer token for internal API access |
+| `SITE_DOMAIN` | `localhost` | Public domain. Anything other than `localhost` makes the session cookie `Secure` (HTTPS only) |
+| `APP_PORT` | `8080` | Host port for the app (compose) |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | `admin` / `changeme` | Admin login seeded on first start if no admin exists |
+| `DISCOVERY_INTERVAL_MINUTES` | `60` | How often events are synced from Spond |
+| `EXECUTIONER_INTERVAL_SECONDS` | `60` | How often the fallback executioner looks for due answers |
+| `RSVP_LEAD_TIME_MS` | `0` | Fire this many milliseconds *before* registration opens, to offset network latency. Spond may reject answers that arrive before opening, so raise it carefully and watch the answer log |
+| `TZ` | `Europe/Berlin` | Scheduler and log timezone |
+| `BACKUP_DIR` | `./backups` | Host folder for database dumps (compose `backup` service) |
+| `BACKUP_INTERVAL_HOURS` | `24` | Time between backups |
+| `BACKUP_KEEP_DAYS` | `14` | Dumps older than this are deleted after a successful backup |
 
 ### 3. Start
 
@@ -57,16 +76,27 @@ Navigate to `http://localhost:8080` and log in with the `ADMIN_USERNAME` / `ADMI
 
 ---
 
-## Adding Spond Users
+## Adding Members
 
-Spond user accounts (the actual Spond credentials the bot will use) are managed from the admin panel at `/admin`.
+### Invite links (recommended)
 
-1. Go to the **Users** section in the admin panel
-2. Click **Add User**
-3. Enter the Spond login (email or phone number), display name, and password
-4. The bot will authenticate with Spond immediately and store the encrypted token
+Members create their own login and connect their own Spond account, so you never handle their passwords.
 
-To let a dashboard user manage their own events, create a **Frontend User** and set its **Linked User** to the corresponding Spond account.
+1. Admin panel → **Users** → **Invite member**
+2. Enter who it is for (shown to you and pre-filled as their display name) and how long the link is valid (1–30 days, default 7)
+3. Copy the link and send it to that one person. It is shown only once and works for a single signup.
+4. The member opens `/join#…`, picks a username and password, and enters their Spond login. SpondBot checks the Spond credentials before creating anything, then signs them straight into their dashboard.
+
+The **Invites** table shows each invite as pending, used or expired. Revoke a pending invite to stop its link working.
+Only a SHA-256 hash of each token is stored, and the token stays in the URL fragment, which browsers never send to the server.
+
+### Existing logins without a Spond account
+
+A signed-in login with no linked Spond account sees a **Connect your Spond account** form on its dashboard and can connect one itself.
+
+### Adding accounts as an admin
+
+You can still do it yourself: **Connect Spond account** (the Spond credentials) and **Add login** (a dashboard login linked to that account).
 
 ---
 
@@ -143,10 +173,46 @@ Swagger UI is available at `/docs` and ReDoc at `/redoc`. Both require an admin 
 ## Health Check
 
 ```
-GET /health
+GET /api/v1/health
 ```
 
-Returns `{"status": "ok", "db": "ok"}` when the app and database are both reachable. Use this as your container health check or uptime monitor target.
+Returns `200 {"status": "ok", "db": "ok", "scheduler": "running"}` when the database is reachable and the scheduler is running, and `503` with the failing part otherwise. No login is needed, so it also works as an uptime-monitor target.
+
+The image's `HEALTHCHECK` polls it every 30 seconds (`scripts/healthcheck.py`). `docker ps` shows the app as `healthy` or `unhealthy`.
+
+**Automatic restarts are opt-in.** Docker's `restart: unless-stopped` only restarts a container whose process exits; it does nothing about an unhealthy one. To restart the app when it turns unhealthy, start the optional `autoheal` service:
+
+```bash
+docker compose --profile autoheal up -d
+```
+
+It watches containers labelled `autoheal=true` (only the app). It needs the Docker socket, which gives it control over every container on the host, so enable it only if that is acceptable for your server.
+
+---
+
+## Backups
+
+The `backup` service runs `pg_dump` when it starts and then every `BACKUP_INTERVAL_HOURS` (default 24), writing `spond_bot-<UTC timestamp>.dump` files to `BACKUP_DIR` (default `./backups` next to `docker-compose.yml`). Dumps older than `BACKUP_KEEP_DAYS` (default 14) are deleted, but only after a successful backup, so repeated failures never remove the last good copy. `docker ps` shows the service as unhealthy when no backup newer than two intervals exists.
+
+```bash
+ls -lh backups/                              # list backups
+docker compose run --rm backup once          # take one now (uses scripts/backup.sh)
+docker compose logs backup                   # see results and failures
+```
+
+**Keep `FERNET_KEY` safe separately.** The dumps contain Spond credentials encrypted with it. A backup without the key cannot be used to run the bot, and anyone with both can read the credentials. Copy `backups/` off the server regularly (for example with rsync or restic), and treat it as sensitive.
+
+### Restoring
+
+Restore into the running database; this replaces its current contents.
+
+```bash
+docker compose stop app backup
+docker compose exec -T db pg_restore --clean --if-exists --no-owner -U spond -d spond_bot < backups/spond_bot-YYYYMMDDTHHMMSSZ.dump
+docker compose start app backup
+```
+
+Use the same `FERNET_KEY` as when the backup was taken. On start the app runs any newer migrations automatically.
 
 ---
 
@@ -180,11 +246,11 @@ See `docs/codebase-review.md` for the full history of known API changes.
 
 **"Login failed" in logs**
 
-The stored password may be wrong, or Spond rejected the credentials. Go to admin → Users → edit the user and re-enter the password.
+The stored password may be wrong (for example, the member changed it in Spond), or Spond rejected the credentials. A stored Spond password cannot be edited yet. Delete the Spond account (admin → Users → Spond accounts → Delete) and connect it again, or send the member an invite. Deleting removes that account's events and answers; the next sync brings the events back with no answer set.
 
 **Events not appearing in dashboard**
 
-Trigger a manual sync: admin panel → **Sync Now**, or `POST /api/v1/admin/sync` with admin credentials. Check logs for API errors.
+Trigger a manual sync: admin panel → **Sync now**, or `POST /api/v1/admin/sync` with admin credentials. Check logs for API errors.
 
 **RSVP fires too late**
 

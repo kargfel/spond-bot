@@ -14,6 +14,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -149,7 +150,11 @@ async def set_decision(
 
 @router.get("/health", summary="Health check", include_in_schema=False)
 async def health(db: AsyncSession = DbDep):
-    """Returns 200 if the app and database are reachable."""
+    """
+    Returns 200 when the database is reachable and the scheduler is running,
+    503 otherwise. Docker's HEALTHCHECK relies on the status code, so a broken
+    dependency must never produce a 200.
+    """
     try:
         from sqlalchemy import text
         await db.execute(text("SELECT 1"))
@@ -157,4 +162,10 @@ async def health(db: AsyncSession = DbDep):
     except Exception as exc:
         logger.error("DB health check failed: %s", exc)
         db_status = "error"
-    return {"status": "ok", "db": db_status}
+
+    scheduler_status = "running" if get_scheduler().running else "stopped"
+    healthy = db_status == "ok" and scheduler_status == "running"
+    body = {"status": "ok" if healthy else "error", "db": db_status, "scheduler": scheduler_status}
+    if not healthy:
+        return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content=body)
+    return body

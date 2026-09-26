@@ -23,6 +23,7 @@
     view: "queue",
     spondUsers: [],
     accounts: [],
+    invites: [],
     events: [],
     jobs: [],
     stats: null,
@@ -346,8 +347,9 @@
 
   /* ── Users ───────────────────────────────────────────────────────── */
   async function loadUsersView() {
-    const accounts = await guarded(() => apiJson("/accounts"));
+    const [accounts, invites] = await Promise.all([guarded(() => apiJson("/accounts")), guarded(() => apiJson("/invites"))]);
     if (accounts) state.accounts = accounts;
+    if (invites) state.invites = invites;
     renderUsers();
   }
 
@@ -364,6 +366,17 @@
           </div></td>
         </tr>`).join("")
       : '<tr><td colspan="4" class="empty-note">No logins.</td></tr>';
+
+    const inviteBadge = { pending: "badge-sig", used: "badge-ok", expired: "" };
+    $("invites-body").innerHTML = state.invites.length
+      ? state.invites.map((i) => `
+        <tr>
+          <td class="t-strong">${i.note ? esc(i.note) : '<span class="t-dim">No name</span>'}</td>
+          <td><span class="badge ${inviteBadge[i.status]}">${i.status}</span></td>
+          <td class="mono nowrap">${i.status === "used" ? `used ${esc(Core.formatDay(i.used_at))}` : esc(`${Core.formatDay(i.expires_at)} ${Core.formatTime(i.expires_at)}`)}</td>
+          <td><div class="actions">${i.status === "pending" ? `<button type="button" class="btn btn-small btn-danger" data-revoke-invite="${esc(i.id)}">Revoke</button>` : ""}</div></td>
+        </tr>`).join("")
+      : '<tr><td colspan="4" class="empty-note">No invites yet. Invite a member to let them sign up and connect their own Spond account.</td></tr>';
 
     $("spond-body").innerHTML = state.spondUsers.length
       ? state.spondUsers.map((u) => `
@@ -454,6 +467,57 @@
       renderUsers();
       toast(`${u.display_name} deleted.`, "success");
       loadStats();
+    }
+  }
+
+  function openInviteDialog() {
+    $("invite-note").value = "";
+    $("invite-days").value = "7";
+    document.querySelector('#invite-dialog [data-step="create"]').hidden = false;
+    document.querySelector('#invite-dialog [data-step="share"]').hidden = true;
+    openDialog("invite-dialog");
+  }
+
+  async function submitInvite(ev) {
+    ev.preventDefault();
+    const btn = $("invite-submit");
+    btn.disabled = true;
+    try {
+      const note = $("invite-note").value.trim() || null;
+      const created = await apiJson("/invites", "POST", { note, days_valid: Number($("invite-days").value) });
+      $("invite-link").value = `${location.origin}/join#${created.token}`;
+      $("invite-expiry").textContent = `${Core.formatDay(created.expires_at)}, ${Core.formatTime(created.expires_at)}`;
+      document.querySelector('#invite-dialog [data-step="create"]').hidden = true;
+      document.querySelector('#invite-dialog [data-step="share"]').hidden = false;
+      $("invite-link").select();
+      loadUsersView();
+    } catch (err) {
+      showDialogError("invite-dialog", err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function copyInvite() {
+    const input = $("invite-link");
+    try {
+      await navigator.clipboard.writeText(input.value);
+      toast("Invite link copied.", "success");
+    } catch {
+      input.select();
+      toast("Select the link and copy it with Ctrl+C or Cmd+C.", "info");
+    }
+  }
+
+  async function revokeInvite(id) {
+    const inv = state.invites.find((i) => i.id === id);
+    if (!inv) return;
+    const who = inv.note || "this member";
+    const ok = await confirmAction(`Revoke the invite for ${who}?`, "The link stops working immediately. You can create a new one at any time.", "Revoke");
+    if (!ok) return;
+    if ((await guarded(() => apiJson(`/invites/${id}`, "DELETE"))) !== FAILED) {
+      toast("Invite revoked.", "success");
+      loadUsersView();
     }
   }
 
@@ -645,6 +709,9 @@
 
     $("add-login-btn").addEventListener("click", () => openLoginDialog(null));
     $("add-spond-btn").addEventListener("click", openSpondDialog);
+    $("invite-btn").addEventListener("click", openInviteDialog);
+    $("invite-form").addEventListener("submit", submitInvite);
+    $("invite-copy").addEventListener("click", copyInvite);
     $("login-form").addEventListener("submit", submitLogin);
     $("spond-form").addEventListener("submit", submitSpond);
 
@@ -663,6 +730,7 @@
       if ((el = t("[data-edit-login]"))) return openLoginDialog(state.accounts.find((a) => a.id === el.dataset.editLogin));
       if ((el = t("[data-delete-login]"))) return deleteLogin(el.dataset.deleteLogin);
       if ((el = t("[data-delete-spond]"))) return deleteSpond(el.dataset.deleteSpond);
+      if ((el = t("[data-revoke-invite]"))) return revokeInvite(el.dataset.revokeInvite);
     });
     document.querySelector(".main").addEventListener("change", (e) => {
       const sw = e.target.closest("[data-active]");

@@ -119,7 +119,13 @@ for i in $(seq 1 6); do curl -s -o /dev/null -w "%{http_code}\n" \
   -H 'Content-Type: application/json' \
   -d '{"username":"x","password":"x"}'; done
 # Expected: 401 401 401 401 401 429
+
+# Health (no login needed): database and scheduler status
+curl -s https://spond.yourdomain.com/api/v1/health
+# Expected: {"status":"ok","db":"ok","scheduler":"running"}
 ```
+
+On the server, `docker compose ps` should show `spond-bot` as `healthy`.
 
 ---
 
@@ -137,7 +143,12 @@ docker compose up -d --build
 docker compose logs -f app
 ```
 
-### Backup the database
+### Backups
+The `backup` service writes a `pg_dump` to `./backups` every 24 hours and keeps 14 days (configurable, see [docs/setup.md](docs/setup.md#backups)). Copy that folder off the server regularly, and keep `FERNET_KEY` safe separately: the dumps are useless without it.
+
 ```bash
-docker exec spond-db pg_dump -U spond spond_bot > backup_$(date +%Y%m%d).sql
+ls -lh backups/                        # existing backups
+docker compose run --rm backup once    # take one now
 ```
+
+Restore steps: [docs/setup.md](docs/setup.md#restoring).

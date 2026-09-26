@@ -307,3 +307,12 @@ dialog::backdrop { background: rgba(10, 16, 14, 0.45); }
   border: 0; background: none; color: var(--accent); font-size: 13px; font-weight: 600; padding: 8px 10px;
 }
 @media (max-width: 879px) { .signin-brand h1 { font-size: 24px; } .signin-trace { display: none; } }
+
+/* ── Join page & connect form ──────────────────────────────────────── */
+.hint { font-size: 13px; color: var(--muted); }
+.form-section { border: 0; border-top: 1px solid var(--line); margin: 4px 0 0; padding: 16px 0 0; display: grid; gap: 14px; min-width: 0; }
+.form-section legend { font-family: var(--font-display); font-weight: 600; font-size: 18px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); padding: 0 8px 0 0; }
+.signin-status { color: var(--muted); }
+.connect { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px; max-width: 520px; display: grid; gap: 14px; }
+.connect h2 { font-size: 19px; font-weight: 700; }
+.connect .btn { justify-self: start; }

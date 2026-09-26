@@ -17,11 +17,11 @@
 
 ## 🌟 Overview
 
-Tired of missing out on high-demand group events because they fill up in seconds? **SpondBot** connects to your Spond account and automatically RSVPs "Yes" to specific events the moment they are created. 
+Tired of missing out on high-demand group events because they fill up in seconds? **SpondBot** connects to your Spond account and sends your answer (Going or Not going) the moment registration opens, to the millisecond. You pick the answer in advance; the bot handles the timing.
 
 Originally a simple cron-script, SpondBot is now a fully-fledged platform featuring:
 - **👮 Multi-User Support**: Host your own instance and let multiple users configure their own RSVP settings.
-- **🎨 Modern Web Dashboard**: A sleek, dark-themed "Midnight Violet" UI to manage your RSVPs, monitor status, and link your Spond account.
+- **🎨 Web Dashboard**: Members answer undecided events from an inbox and see every event by day, on phone or desktop. Admins get a live console with the answer queue, a per-account timeline, an audit log and timing charts.
 - **⚡ Background Automation**: Fully containerized schedule-driven worker that strictly adheres to your configured limits.
 - **🔒 Secure & Private**: Hosted entirely on your own hardware. Your Spond credentials are systematically encrypted.
 
@@ -31,7 +31,8 @@ Originally a simple cron-script, SpondBot is now a fully-fledged platform featur
 
 - **Phone & Email Authentication**: Automatically detects whether an account uses an email or phone number.
 - **Zero-Trust Hardened**: All stored credentials are encrypted with a Fernet symmetric key.
-- **Admin Management Portal**: Built-in Admin dashboard to manage users, reset passwords, and oversee system health.
+- **Admin Management Portal**: Invite members with single-use links (they connect their own Spond account, so you never handle their passwords), manage logins, and watch timing and failures.
+- **Operations built in**: Container health checks (`/api/v1/health`) and nightly database backups with retention.
 - **Automated Deployments**: Quick-start configured with Docker & `docker-compose`.
 
 ---
@@ -76,7 +77,7 @@ Log in with:
 - **Username**: `admin`
 - **Password**: *(What you set for `ADMIN_PASSWORD`)*
 
-From there, you can link your Spond account and start automating your RSVPs!
+From there, open **My events** to connect your own Spond account, and invite members from **Users → Invite member**. See [docs/setup.md](docs/setup.md) for backups, health checks and every setting.
 
 ---
 

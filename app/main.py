@@ -16,9 +16,8 @@ from fastapi import FastAPI, Request
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 from sqlalchemy import select
 
 from app.api import accounts as accounts_router
@@ -27,6 +26,7 @@ from app.api import admin as admin_router
 from app.api import auth as auth_router
 from app.api import stream as stream_router
 from app.api import events as events_router
+from app.api import invites as invites_router
 from app.api import users as users_router
 from app.config import settings
 from app.core.security import hash_password
@@ -90,7 +90,7 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 # Rate limiter — shared instance; routers attach @_limiter.limit() decorators
 # ---------------------------------------------------------------------------
-limiter = Limiter(key_func=get_remote_address)
+from app.core.rate_limit import limiter  # noqa: E402
 
 app = FastAPI(
     title="Spond Multi-User Bot",
@@ -117,6 +117,7 @@ app.include_router(users_router.router, prefix="/api/v1")
 app.include_router(events_router.router, prefix="/api/v1")
 app.include_router(admin_router.router, prefix="/api/v1")
 app.include_router(stream_router.router, prefix="/api/v1")
+app.include_router(invites_router.router, prefix="/api/v1")
 
 # ── Frontend Serving ────────────────────────────────────────────────
 
@@ -142,6 +143,12 @@ async def serve_dashboard():
 @app.get("/admin.html")
 async def serve_admin():
     return FileResponse(_FRONTEND_DIR / "admin.html")
+
+
+@app.get("/join")
+@app.get("/join.html")
+async def serve_join():
+    return FileResponse(_FRONTEND_DIR / "join.html")
 
 
 @app.get("/docs", include_in_schema=False)

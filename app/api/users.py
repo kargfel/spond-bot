@@ -5,6 +5,7 @@ Admins can list, create, update, and delete Spond user accounts.
 Regular users can only read and update their own linked Spond user profile.
 
 POST   /spond-accounts           Register a new Spond user (admin only)
+POST   /spond-accounts/me        Connect a Spond account to your own login (any signed-in login without one)
 GET    /spond-accounts           List all users (admin only)
 GET    /spond-accounts/{id}      Get a single user (admin or own)
 PATCH  /spond-accounts/{id}      Update display_name or is_active (admin or own)
@@ -13,17 +14,17 @@ DELETE /spond-accounts/{id}      Remove user and cascade-delete events (admin on
 import logging
 import uuid
 
-import aiohttp
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminDep, CurrentUser, DbDep
-from app.core import spond_client
-from app.core.security import encrypt
-from app.core.spond_client import SpondAuthError
+from app.core.rate_limit import limiter
+from app.core.session import set_session_cookie
+from app.models.frontend_user import FrontendUser
 from app.models.user import User
-from app.schemas.user import UserCreate, UserResponse, UserUpdate
+from app.schemas.user import SpondConnect, UserCreate, UserResponse, UserUpdate
+from app.services.spond_accounts import connect_spond_account, ensure_login_available
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/spond-accounts", tags=["Spond Accounts"])
@@ -53,44 +54,55 @@ async def create_user(payload: UserCreate, db: AsyncSession = DbDep):
     Credentials are stored encrypted; plaintext is never persisted.
     Only admins can do this.
     """
-    existing = await db.execute(select(User).where(User.login == payload.login))
-    if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"A user with login {payload.login!r} already exists.",
-        )
-
-    try:
-        async with aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar()) as http:
-            token, acquired_at = await spond_client.login(
-                http, payload.login, payload.password
-            )
-            profile_id = await spond_client.get_profile_id(http, token)
-    except SpondAuthError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Spond authentication failed: {exc}",
-        )
-    except Exception as exc:
-        logger.error("Unexpected error registering user %r: %s", payload.login, exc)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Could not reach the Spond API. Try again later.",
-        )
-
-    user = User(
-        id=uuid.uuid4(),
-        display_name=payload.display_name,
-        login=payload.login,
-        encrypted_password=encrypt(payload.password),
-        encrypted_access_token=encrypt(token),
-        token_acquired_at=acquired_at,
-        profile_id=profile_id,
-    )
+    await ensure_login_available(db, payload.login)
+    user = await connect_spond_account(payload.login, payload.password, payload.display_name)
     db.add(user)
     await db.commit()
     await db.refresh(user)
     logger.info("Registered Spond user %r (profile_id=%s)", user.display_name, user.profile_id)
+    return user
+
+
+@router.post(
+    "/me",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Connect a Spond account to your own login",
+)
+@limiter.limit("5/minute")
+async def connect_own_account(
+    request: Request,
+    response: Response,
+    payload: SpondConnect,
+    db: AsyncSession = DbDep,
+    current_user: dict = CurrentUser,
+):
+    """
+    For a signed-in login that has no Spond account yet. Verifies the credentials
+    with Spond, links the new account, and re-issues the session cookie so the
+    new link takes effect immediately. The database, not the cookie, decides
+    whether the login is already linked.
+    """
+    login = await db.get(FrontendUser, uuid.UUID(current_user["sub"]))
+    if not login:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Login not found.")
+    if login.linked_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Your login is already linked to a Spond account. Ask your admin to change it.",
+        )
+    await ensure_login_available(db, payload.login)
+
+    user = await connect_spond_account(payload.login, payload.password, payload.display_name)
+    db.add(user)
+    await db.flush()
+    login.linked_user_id = user.id
+    await db.commit()
+    await db.refresh(user)
+    await db.refresh(login)
+
+    set_session_cookie(response, login)
+    logger.info("Login %r connected Spond account %r.", login.username, user.login)
     return user
 
 

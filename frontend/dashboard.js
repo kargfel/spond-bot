@@ -95,11 +95,43 @@
 
   function renderUnlinked() {
     $("headline").textContent = "No Spond account is linked to your login";
-    $("subline").innerHTML = state.me.is_admin
-      ? 'Link one to your login in the <a href="/admin">admin panel</a> to see your events here.'
-      : "Ask your SpondBot admin to link your Spond account. Your events will show up here once it is linked.";
+    $("subline").textContent = "Connect your Spond account below and your events will show up here.";
+    $("connect").hidden = false;
     $("inbox").hidden = true;
     $("agenda").hidden = true;
+  }
+
+  async function connectAccount(e) {
+    e.preventDefault();
+    const err = $("connect-error");
+    err.hidden = true;
+    const login = $("connect-login").value.trim();
+    const password = $("connect-password").value;
+    const name = $("connect-name").value.trim();
+    if (!login || !password) {
+      err.textContent = "Enter your Spond email or phone and password.";
+      err.hidden = false;
+      return;
+    }
+    const btn = $("connect-submit");
+    btn.disabled = true;
+    btn.textContent = "Checking with Spond…";
+    try {
+      state.spondUser = await apiJson("/spond-accounts/me", "POST", { login, password, display_name: name || null });
+      // The server issued a fresh session cookie that includes the new link.
+      const fresh = await fetchCurrentUser();
+      state.me = { ...state.me, ...fresh, linked_user_id: state.spondUser.id };
+      $("connect").hidden = true;
+      paintIdentity();
+      toast("Spond account connected.", "success");
+      await loadEvents();
+      startStream();
+    } catch (ex) {
+      err.textContent = ex.status === 429 ? "Too many attempts. Wait a minute and try again." : ex.message;
+      err.hidden = false;
+      btn.disabled = false;
+      btn.textContent = "Connect";
+    }
   }
 
   function renderSummary(open, upcoming, now) {
@@ -305,6 +337,7 @@
     $("menu-signout").addEventListener("click", signOut);
     $("profile-form").addEventListener("submit", saveProfile);
     $("password-form").addEventListener("submit", savePassword);
+    $("connect-form").addEventListener("submit", connectAccount);
 
     $("tab-upcoming").addEventListener("click", () => selectTab("upcoming"));
     $("tab-past").addEventListener("click", () => selectTab("past"));
@@ -348,6 +381,10 @@
       /* the name falls back to the username */
     }
     await loadEvents();
+    startStream();
+  }
+
+  function startStream() {
     connectStream("/user/stream", {
       rsvp_fired: (d) => {
         toast(

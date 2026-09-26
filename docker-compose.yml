@@ -28,6 +28,54 @@ services:
       - .env
     environment:
       - TZ=${TZ:-Europe/Berlin}
+    # Health: the image's HEALTHCHECK polls /api/v1/health (see Dockerfile).
+    # Only the optional autoheal service below acts on this label.
+    labels:
+      autoheal: "true"
+
+  # Database backups: pg_dump every BACKUP_INTERVAL_HOURS into BACKUP_DIR,
+  # keeping BACKUP_KEEP_DAYS days. Restore steps: docs/setup.md.
+  backup:
+    image: postgres:16-alpine
+    container_name: spond-backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: ["sh", "/scripts/backup.sh"]
+    command: ["loop"]
+    environment:
+      PGHOST: db
+      PGUSER: spond
+      PGDATABASE: spond_bot
+      PGPASSWORD: ${DB_PASSWORD}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - ./scripts/backup.sh:/scripts/backup.sh:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    healthcheck:
+      test: ["CMD", "sh", "/scripts/backup.sh", "check"]
+      interval: 1h
+      timeout: 10s
+      start_period: 5m
+
+  # Optional: restart the app automatically when it turns unhealthy.
+  # Docker itself only restarts containers that exit. Enable with:
+  #   docker compose --profile autoheal up -d
+  # It needs the Docker socket, which gives it control over all containers
+  # on the host; leave it off if that is not acceptable.
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    container_name: spond-autoheal
+    profiles: ["autoheal"]
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: 30
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   postgres_data:

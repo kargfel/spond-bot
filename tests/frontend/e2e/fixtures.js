@@ -11,6 +11,9 @@ const H = 3600e3;
 const D = 24 * H;
 const iso = (ms) => new Date(ms).toISOString();
 
+const SPOND_REJECTED = "Spond did not accept that login and password. Check them in the Spond app and try again.";
+const inviteStatus = (i) => (i.used_at ? "used" : Date.parse(i.expires_at) <= NOW ? "expired" : "pending");
+
 const TYPES = { ".html": "text/html", ".css": "text/css", ".js": "application/javascript", ".svg": "image/svg+xml" };
 
 function event(id, user_id, heading, start, invite, user_choice, status, error_message = null) {
@@ -68,6 +71,11 @@ function defaultState() {
       { id: "l3", event_id: "m9", user_id: "u2", spond_event_id: "sp-m9-abcdef", choice: "accept",
         fired_at: iso(NOW - 3 * D), submitted_at: iso(NOW - 3 * D + 90), outcome: "retry_success", retry_count: 1, error_detail: null },
     ],
+    invites: [
+      { id: "i1", token: "used-token", note: "Jonas", created_at: iso(NOW - 3 * D), expires_at: iso(NOW + 4 * D), used_at: iso(NOW - D) },
+      { id: "i2", token: "valid-token", note: "Mara", created_at: iso(NOW - H), expires_at: iso(NOW + 7 * D), used_at: null },
+      { id: "i3", token: "old-token", note: null, created_at: iso(NOW - 10 * D), expires_at: iso(NOW - 3 * D), used_at: null },
+    ],
     charts: {
       latency_scatter: [
         { fired_at: iso(NOW - 2 * D), latency_ms: 41, user_name: "Felix Karg", heading: "Training, Hall B" },
@@ -93,18 +101,31 @@ class MockApi {
   }
 
   asMember(overrides = {}) {
-    this.state.me = { sub: "a1", username: "felix", is_admin: false, linked_user_id: "u1", ...overrides };
-    return this;
+    return this.signIn({ sub: "a1", username: "felix", is_admin: false, linked_user_id: "u1", ...overrides });
   }
 
   asAdmin(overrides = {}) {
-    this.state.me = { sub: "a2", username: "admin", is_admin: true, linked_user_id: null, ...overrides };
+    return this.signIn({ sub: "a2", username: "admin", is_admin: true, linked_user_id: null, ...overrides });
+  }
+
+  /** Session claims mirror the stored login, as they do on the real server. */
+  signIn(claims) {
+    this.state.me = claims;
+    const acct = this.state.accounts.find((a) => a.id === claims.sub);
+    if (acct) Object.assign(acct, { is_admin: claims.is_admin, linked_user_id: claims.linked_user_id });
     return this;
   }
 
   signedOut() {
     this.state.me = null;
     return this;
+  }
+
+  addSpondUser(login, displayName) {
+    const u = { id: `u${this.state.spondUsers.length + 1}`, display_name: displayName || login.split("@")[0], login,
+      profile_id: "PROFILE-NEW", is_active: true, created_at: new Date(NOW).toISOString() };
+    this.state.spondUsers.push(u);
+    return u;
   }
 
   /** API calls matching method and path (path without the /api/v1 prefix). */
@@ -126,7 +147,7 @@ class MockApi {
   }
 
   serveFile(route, pathname) {
-    const pages = { "/": "index.html", "/login": "index.html", "/dashboard": "dashboard.html", "/admin": "admin.html" };
+    const pages = { "/": "index.html", "/login": "index.html", "/dashboard": "dashboard.html", "/admin": "admin.html", "/join": "join.html" };
     const rel = pages[pathname] || pathname.slice(1);
     const file = path.join(FRONTEND, rel);
     if (!file.startsWith(FRONTEND) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
@@ -162,6 +183,27 @@ class MockApi {
       }
       s.me = { sub: acct.id, username: acct.username, is_admin: acct.is_admin, linked_user_id: acct.linked_user_id };
       return empty(204);
+    }
+    if (method === "POST" && p === "/invites/check") {
+      const inv = s.invites.find((i) => i.token === body.token);
+      if (!inv) return json(200, { valid: false, reason: "unknown", note: null, expires_at: null });
+      const st = inviteStatus(inv);
+      if (st !== "pending") return json(200, { valid: false, reason: st, note: null, expires_at: null });
+      return json(200, { valid: true, reason: null, note: inv.note, expires_at: inv.expires_at });
+    }
+    if (method === "POST" && p === "/invites/accept") {
+      const inv = s.invites.find((i) => i.token === body.token);
+      const st = inv ? inviteStatus(inv) : null;
+      if (st !== "pending") return json(410, { detail: st === "used" ? "This invite has already been used." : "This invite link is not valid." });
+      if (s.accounts.some((a) => a.username === body.username)) return json(409, { detail: "That username is taken. Pick another one." });
+      if (body.spond_password === "wrong") return json(401, { detail: SPOND_REJECTED });
+      const u = this.addSpondUser(body.spond_login, body.display_name);
+      const acct = { id: `a${s.accounts.length + 1}`, username: body.username, is_admin: false, linked_user_id: u.id };
+      s.accounts.push(acct);
+      s.passwords[acct.username] = body.password;
+      inv.used_at = new Date(NOW).toISOString();
+      s.me = { sub: acct.id, username: acct.username, is_admin: false, linked_user_id: u.id };
+      return json(201, acct);
     }
     if (!me) return json(401, { detail: "Not authenticated" });
 
@@ -211,6 +253,15 @@ class MockApi {
         return json(201, u);
       }
     }
+    if (method === "POST" && p === "/spond-accounts/me") {
+      const acct = s.accounts.find((a) => a.id === me.sub);
+      if (me.linked_user_id || acct?.linked_user_id) return json(409, { detail: "Your login is already linked to a Spond account." });
+      if (body.password === "wrong") return json(401, { detail: SPOND_REJECTED });
+      const u = this.addSpondUser(body.login, body.display_name);
+      if (acct) acct.linked_user_id = u.id;
+      s.me = { ...me, linked_user_id: u.id };
+      return json(201, u);
+    }
     if ((hit = m(/^\/spond-accounts\/([^/]+)$/))) {
       const u = s.spondUsers.find((x) => x.id === hit[1]);
       if (!u) return json(404, { detail: "User not found." });
@@ -243,6 +294,21 @@ class MockApi {
       if (method === "DELETE") { s.accounts = s.accounts.filter((x) => x !== a); return empty(204); }
     }
 
+    if (p === "/invites") {
+      const view = (i) => ({ id: i.id, note: i.note, created_at: i.created_at, expires_at: i.expires_at, used_at: i.used_at, status: inviteStatus(i) });
+      if (method === "GET") return json(200, [...s.invites].reverse().map(view));
+      if (method === "POST") {
+        const inv = { id: `i${s.invites.length + 1}`, token: `tok-${s.invites.length + 1}-abcdefghijklmnopqrstuvwxyz0123456789`, note: body.note ?? null,
+          created_at: new Date(NOW).toISOString(), expires_at: new Date(NOW + (body.days_valid ?? 7) * D).toISOString(), used_at: null };
+        s.invites.push(inv);
+        return json(201, { ...view(inv), token: inv.token });
+      }
+    }
+    if ((hit = m(/^\/invites\/([^/]+)$/)) && method === "DELETE") {
+      const before = s.invites.length;
+      s.invites = s.invites.filter((i) => i.id !== hit[1]);
+      return before === s.invites.length ? json(404, { detail: "Invite not found." }) : empty(204);
+    }
     if (method === "GET" && p === "/admin/stats") return json(200, s.stats);
     if (method === "GET" && p === "/admin/scheduler") return json(200, s.jobs);
     if (method === "GET" && p === "/admin/rsvp-log") {

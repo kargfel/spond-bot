@@ -41,3 +41,6 @@ package-lock.json
 playwright.config.js
 test-results/
 playwright-report/
+
+# Database backups must never be baked into the image
+backups/

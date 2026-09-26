@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Public+Sans:wght@400;500;600;700&display=swap" />
-    <link rel="stylesheet" href="member.css?v=1" />
+    <link rel="stylesheet" href="member.css?v=2" />
   </head>
   <body>
     <header class="topbar">
@@ -30,6 +30,27 @@
       <section class="summary" data-testid="summary">
         <h1 id="headline">Loading your events…</h1>
         <p id="subline"></p>
+      </section>
+
+      <section id="connect" hidden>
+        <form class="connect" id="connect-form" aria-labelledby="connect-title" novalidate>
+          <h2 id="connect-title">Connect your Spond account</h2>
+          <p class="hint">SpondBot signs in to Spond as you to send your answers. Your Spond password is stored encrypted and never shown to anyone.</p>
+          <p class="form-error" id="connect-error" role="alert" hidden></p>
+          <div class="field">
+            <label for="connect-login">Spond email or phone</label>
+            <input id="connect-login" class="input" type="text" autocomplete="off" autocapitalize="none" />
+          </div>
+          <div class="field">
+            <label for="connect-password">Spond password</label>
+            <input id="connect-password" class="input" type="password" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="connect-name">Name shown in SpondBot</label>
+            <input id="connect-name" class="input" type="text" maxlength="255" autocomplete="name" />
+          </div>
+          <button type="submit" class="btn btn-primary" id="connect-submit">Connect</button>
+        </form>
       </section>
 
       <div class="failures" id="failures"></div>
@@ -101,6 +122,6 @@
 
     <script src="core.js?v=1"></script>
     <script src="app.js?v=8"></script>
-    <script src="dashboard.js?v=1"></script>
+    <script src="dashboard.js?v=2"></script>
   </body>
 </html>

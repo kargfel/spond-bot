@@ -7,6 +7,8 @@ Static HTML/CSS/JS served by the FastAPI app from the same origin. No build step
 ```
 frontend/
 ├── index.html      Sign-in page
+├── join.html       Invite signup page (markup)
+├── join.js         Invite signup: create a login and connect a Spond account
 ├── dashboard.html  Member dashboard (markup)
 ├── dashboard.js    Member dashboard: decision inbox + day-grouped agenda
 ├── admin.html      Admin panel (markup)
@@ -29,6 +31,11 @@ Script order on every page: `core.js`, then `app.js`, then the page script.
 - **Agenda**: upcoming (or past) events grouped by day, each with a Going / Not going /
   Leave to me control. Answered events show the answer instead of controls.
 - **Account menu**: profile (display name), change password, admin panel (admins only), sign out.
+- **No Spond account yet**: the dashboard shows a "Connect your Spond account" form (`POST /spond-accounts/me`). The server issues a fresh session cookie with the new link, then the events load.
+
+## Join page (`/join#<token>`)
+
+Opened from an admin's invite link. It checks the token (`POST /invites/check`), removes it from the address bar, and either explains why the invite can't be used (used, expired, unknown) or shows the signup form: username, password, Spond login and password, and display name (pre-filled from the invite). `POST /invites/accept` verifies the Spond credentials, creates the login, links it and signs the member in.
 
 `accept` / `decline` / `manual` are labelled Going / Not going / Leave to me throughout.
 
@@ -40,7 +47,7 @@ Hash-routed views, so each one can be bookmarked:
 |---|---|
 | `#queue` | Countdown to the next armed answer, health counters (armed, no answer, failed, latency p50/p95, last sync), and every account's events ordered by fire time. Change answers inline, send an armed answer now, disarm it, or retry a failure. |
 | `#timeline` | One lane per Spond account over two weeks: registration opening (marker) to event start (bar). Select a marker for details and to change the answer. |
-| `#users` | Dashboard logins and Spond accounts: add, edit, pause, delete. |
+| `#users` | Invite members (single-use links, shown once, with copy button), the invites list with revoke, dashboard logins and Spond accounts: add, edit, pause, delete. |
 | `#log` | RSVP audit log with latency from registration opening. |
 | `#charts` | Latency scatter and daily outcomes (Chart.js from jsDelivr, with SRI), plus a per-account table that works without the chart library. |
 
