@@ -134,6 +134,12 @@ Database schema changes are applied automatically on startup via Alembic (if con
 
 ---
 
+## API Documentation
+
+Swagger UI is available at `/docs` and ReDoc at `/redoc`. Both require an admin session — log in to the dashboard first, then navigate to `/docs` in the same browser.
+
+---
+
 ## Health Check
 
 ```
@@ -178,7 +184,7 @@ The stored password may be wrong, or Spond rejected the credentials. Go to admin
 
 **Events not appearing in dashboard**
 
-Trigger a manual sync: admin panel → **Sync Now**, or `POST /api/v1/sync` with admin credentials. Check logs for API errors.
+Trigger a manual sync: admin panel → **Sync Now**, or `POST /api/v1/admin/sync` with admin credentials. Check logs for API errors.
 
 **RSVP fires too late**
 
