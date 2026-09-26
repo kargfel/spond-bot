@@ -21,8 +21,8 @@
 | `app/api/accounts.py` | `/accounts/*` — dashboard (frontend) user CRUD (admin only) |
 | `app/api/events.py` | `/events/*` — list, get, set RSVP decision |
 | `app/api/users.py` | `/spond-accounts/*` — Spond credential account CRUD (admin only) |
-| `app/api/admin.py` | `/admin/*` — rsvp-log, stats, sync, charts, scheduler, SSE admin stream |
-| `app/api/stream.py` | `/user/stream` — SSE user stream |
+| `app/api/admin.py` | `/admin/*` — rsvp-log, stats, sync, charts, scheduler |
+| `app/api/stream.py` | `/admin/stream`, `/user/stream` — SSE admin and user streams |
 | `app/api/deps.py` | FastAPI dependency injectors: `CurrentUser`, `DbDep`, `AdminDep` |
 | `app/schemas/` | Pydantic request/response models |
 | `frontend/` | Vanilla JS SPA — `index.html` (login), `dashboard.html`, `admin.html`, `app.js`, `style.css` |
@@ -144,7 +144,7 @@ The initial implementation tried to base64-decode the `accessToken.token` value,
 - **No Alembic migrations:** schema changes require manual SQL or recreating the DB. As the schema evolves, proper migration tooling should be added.
 - **No test suite:** there are no automated tests. Core logic (token lifecycle, sniper scheduling, upsert behavior) would benefit from unit tests.
 - **Frontend is a monolith:** `app.js` is a single large file handling all three pages. As features grow, this will become hard to maintain.
-- **Audit log is append-only with no UI pagination:** the `rsvp_log` table records every submission attempt (outcome, timing, error detail). The `/admin/rsvp-log` endpoint currently returns all rows — add server-side pagination before the log grows large.
+- **Audit log is append-only:** the `rsvp_log` table records every submission attempt (outcome, timing, error detail). The `/admin/rsvp-log` endpoint accepts a `limit` param (default 100, max 500) and supports `user_id`/`since` filters.
 - **Fernet key rotation is destructive:** changing `FERNET_KEY` invalidates all stored credentials with no migration path.
 - **Single APScheduler instance:** the scheduler lives in the same process as the web server. Under high load, a slow RSVP batch could affect HTTP response times. For scale, consider a separate worker process.
 - **Discovery is sequential per user:** `_sync_user()` calls are made in a loop, not concurrently. With many users, discovery can take a long time. Consider `asyncio.gather` with a semaphore.
