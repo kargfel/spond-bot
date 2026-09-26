@@ -3,9 +3,13 @@
 
 All endpoints require is_admin == True (enforced via AdminDep).
 
-GET  /admin/rsvp-log        Paginated RSVP audit log
-GET  /admin/stats           System health stats
-POST /admin/sync            Trigger a discovery sync
+GET    /admin/rsvp-log                  Paginated RSVP audit log
+GET    /admin/stats                    System health stats
+GET    /admin/charts                   Chart data for dashboard
+GET    /admin/scheduler                List armed sniper jobs
+DELETE /admin/scheduler/{job_id}       Cancel a sniper job
+POST   /admin/scheduler/{job_id}/fire  Fire a sniper immediately
+POST   /admin/sync                     Trigger a discovery sync
 """
 import contextlib
 import uuid
@@ -299,16 +303,18 @@ async def list_scheduler_jobs(db: AsyncSession = DbDep):
 )
 async def cancel_scheduler_job(job_id: str):
     """Removes the sniper (and its warmup job) from APScheduler. Idempotent."""
+    if not job_id.startswith("sniper_"):
+        raise HTTPException(status_code=400, detail="job_id must start with 'sniper_'.")
+
     from apscheduler.jobstores.base import JobLookupError
     from app.workers.scheduler import get_scheduler
 
     scheduler = get_scheduler()
     with contextlib.suppress(JobLookupError):
         scheduler.remove_job(job_id)
-    if job_id.startswith("sniper_"):
-        warmup_id = "warmup_" + job_id[len("sniper_"):]
-        with contextlib.suppress(JobLookupError):
-            scheduler.remove_job(warmup_id)
+    warmup_id = "warmup_" + job_id[len("sniper_"):]
+    with contextlib.suppress(JobLookupError):
+        scheduler.remove_job(warmup_id)
 
 
 @router.post(
