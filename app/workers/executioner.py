@@ -337,6 +337,7 @@ def schedule_sniper(scheduler: AsyncIOScheduler, event: Event) -> None:
         misfire_grace_time=30,
     )
     logger.debug("Sniper scheduled for event %s at %s (lead=%dms)", event.id, fire_at, settings.rsvp_lead_time_ms)
+    asyncio.create_task(bus.publish_admin("scheduler_changed", {"action": "scheduled", "event_id": str(event.id)}))
     schedule_warmup(scheduler, event)
 
 
@@ -345,6 +346,7 @@ def cancel_sniper(scheduler: AsyncIOScheduler, event_id: _uuid.UUID) -> None:
     with contextlib.suppress(JobLookupError):
         scheduler.remove_job(_sniper_job_id(event_id))
     cancel_warmup(scheduler, event_id)
+    asyncio.create_task(bus.publish_admin("scheduler_changed", {"action": "cancelled", "event_id": str(event_id)}))
 
 
 async def run_sniper(event_id: _uuid.UUID) -> None:
