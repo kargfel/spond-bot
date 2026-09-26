@@ -10,6 +10,7 @@ For each active user:
 New events are inserted with user_choice='manual' and status='pending',
 so the executioner will not act on them until the user explicitly sets a choice.
 """
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -18,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core import spond_client
+from app.core.event_bus import bus
 from app.core.spond_client import SpondAuthError, parse_event_timestamps
 from app.database import AsyncSessionLocal
 from app.models.event import CHOICE_ACCEPT, CHOICE_MANUAL, STATUS_PENDING, Event
@@ -60,6 +62,9 @@ async def run_discovery() -> None:
 
     global last_discovery_at
     last_discovery_at = datetime.now(timezone.utc)
+    asyncio.ensure_future(bus.publish_admin("discovery_completed", {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }))
     logger.info("=== Discovery sync complete ===")
 
 
