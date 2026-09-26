@@ -333,13 +333,15 @@
 
     <div id="toast-container"></div>
 
-    <script src="app.js?v=5"></script>
+    <script src="app.js?v=6"></script>
     <script>
       // Replace template literals that couldn't render before app.js loaded
       document.querySelector(".sidebar-item.active").innerHTML =
         ICON.events + " My Events";
       document.querySelector(".sidebar-item:nth-child(2)").innerHTML =
         ICON.user + " My Profile";
+      document.querySelector(".sidebar-item:nth-child(3)").innerHTML =
+        ICON.lock + " Change Password";
       document.getElementById("admin-nav-link").innerHTML =
         ICON.shield + " Admin Panel";
       document.querySelector(".sidebar-footer .btn-ghost").innerHTML =

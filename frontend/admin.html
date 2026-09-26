@@ -554,13 +554,13 @@
 
     <div id="toast-container"></div>
 
-    <script src="app.js?v=6"></script>
+    <script src="app.js?v=7"></script>
     <script>
       // Fix template literals in static HTML
       document.querySelectorAll("[data-view]").forEach((el) => {
-        const icons = [ICON.events, ICON.user, ICON.shield, ICON.sync];
-        const labels = [" Events", " Users", " RSVP Log", " Trigger Sync"];
-        const i = ["events", "users", "rsvp-log", "sync"].indexOf(
+        const icons = [ICON.events, ICON.user, ICON.shield, ICON.chart, ICON.sync];
+        const labels = [" Events", " Users", " RSVP Log", " Charts", " Trigger Sync"];
+        const i = ["events", "users", "rsvp-log", "stats-charts", "sync"].indexOf(
           el.dataset.view ?? el.getAttribute("onclick")?.match(/'(\w+)'/)?.[1],
         );
         if (i >= 0) el.innerHTML = icons[i] + labels[i];
@@ -1304,7 +1304,7 @@
           data: {
             datasets: [{
               label: 'Latency (ms)',
-              data: data.latency_scatter.map(p => ({ x: new Date(p.fired_at).getTime(), y: p.latency_ms })),
+              data: data.latency_scatter.map(p => ({ x: new Date(p.fired_at).getTime(), y: p.latency_ms, user_name: p.user_name, heading: p.heading })),
               backgroundColor: 'rgba(64,138,113,0.6)',
               pointRadius: 4,
             }]
@@ -1321,7 +1321,9 @@
                 callbacks: {
                   label: ctx => {
                     const date = new Date(ctx.parsed.x).toLocaleString();
-                    return `${date} — ${ctx.parsed.y} ms`;
+                    const name = ctx.raw.user_name || '';
+                    const heading = ctx.raw.heading ? ` · ${ctx.raw.heading}` : '';
+                    return `${name}${heading}: ${ctx.parsed.y} ms (${date})`;
                   }
                 }
               }
