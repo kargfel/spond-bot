@@ -2,151 +2,90 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SpondBot — Sign In</title>
-    <meta
-      name="description"
-      content="Sign in to SpondBot, your automated Spond RSVP dashboard."
-    />
-    <link rel="stylesheet" href="style.css?v=5" />
-    <style>
-      /* Login page is already mobile-friendly via style.css;
-         this just ensures inputs have large enough tap targets on phones */
-      @media (max-width: 640px) {
-        .auth-page { padding: 1.5rem 1rem; }
-        .auth-bg-orb:nth-child(1) { width: 300px; height: 300px; }
-        .auth-bg-orb:nth-child(2) { width: 220px; height: 220px; }
-        .input { padding: 0.75rem 0.875rem; font-size: 1rem; } /* 1rem prevents iOS zoom */
-        .btn-primary { padding: 0.75rem 1.1rem; font-size: 1rem; }
-      }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Sign in · SpondBot</title>
+    <meta name="description" content="Sign in to SpondBot, which answers your Spond invites the second registration opens." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Public+Sans:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="member.css?v=1" />
   </head>
   <body>
-    <div class="auth-page">
-      <!-- Background orbs -->
-      <div class="auth-bg-orb"></div>
-      <div class="auth-bg-orb"></div>
+    <div class="signin">
+      <section class="signin-brand">
+        <div>
+          <div class="wordmark">Spond<span>Bot</span></div>
+          <h1>Your answer goes out the second registration opens.</h1>
+        </div>
+        <dl class="signin-trace" aria-label="Example">
+          <dt>Registration opens</dt><dd>19:30:00.000</dd>
+          <dt>Answer sent</dt><dd>19:30:00.041</dd>
+          <dt>Answer</dt><dd>Going</dd>
+        </dl>
+      </section>
 
-      <!-- Logo -->
-      <div class="auth-logo-area">
-        <div class="auth-logo-text">Spond<span>Bot</span></div>
-        <div class="auth-tagline">Never miss a spot again.</div>
-      </div>
-
-      <!-- Card -->
-      <div class="auth-card">
-        <form class="auth-form" id="signin-form" onsubmit="handleSignIn(event)">
-          <div id="signin-error" class="auth-error"></div>
+      <main class="signin-main">
+        <form class="signin-form" id="signin-form" novalidate>
+          <h2>Sign in</h2>
+          <p>Use the login your SpondBot admin gave you.</p>
+          <p class="form-error" id="signin-error" role="alert" hidden></p>
           <div class="field">
             <label for="signin-username">Username</label>
-            <input
-              id="signin-username"
-              class="input"
-              type="text"
-              placeholder="Your username"
-              autocomplete="username"
-              required
-            />
+            <input id="signin-username" class="input" type="text" autocomplete="username" autocapitalize="none" required />
           </div>
           <div class="field">
             <label for="signin-password">Password</label>
-            <div class="input-wrap">
-              <input
-                id="signin-password"
-                class="input"
-                type="password"
-                placeholder="••••••••"
-                autocomplete="current-password"
-                required
-              />
-              <button
-                type="button"
-                class="input-icon"
-                onclick="togglePassword('signin-password', this)"
-                tabindex="-1"
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              </button>
+            <div class="pw-wrap">
+              <input id="signin-password" class="input" type="password" autocomplete="current-password" required />
+              <button type="button" class="pw-toggle" id="pw-toggle" aria-label="Show password" aria-controls="signin-password">Show</button>
             </div>
           </div>
-          <button
-            type="submit"
-            class="btn btn-primary btn-full"
-            id="signin-btn"
-          >
-            Sign In
-          </button>
+          <button type="submit" class="btn btn-primary" id="signin-btn">Sign in</button>
         </form>
-      </div>
+      </main>
     </div>
 
-    <div id="toast-container"></div>
-
-    <script src="app.js?v=5"></script>
+    <script src="core.js?v=1"></script>
+    <script src="app.js?v=8"></script>
     <script>
-      // If already logged in (cookie present), redirect to appropriate page
-      (async function checkExistingSession() {
+      (async function redirectIfSignedIn() {
         const user = await fetchCurrentUser();
-        if (user) {
-          window.location.href = user.is_admin ? "/admin" : "/dashboard";
-        }
+        if (user) window.location.href = user.is_admin ? "/admin" : "/dashboard";
       })();
 
-      function togglePassword(inputId, btn) {
-        const input = document.getElementById(inputId);
-        const isText = input.type === "text";
-        input.type = isText ? "password" : "text";
-        btn.style.color = isText ? "" : "var(--mint)";
-      }
+      document.getElementById("pw-toggle").addEventListener("click", (e) => {
+        const input = document.getElementById("signin-password");
+        const show = input.type === "password";
+        input.type = show ? "text" : "password";
+        e.currentTarget.textContent = show ? "Hide" : "Show";
+        e.currentTarget.setAttribute("aria-label", show ? "Hide password" : "Show password");
+      });
 
-      async function handleSignIn(e) {
+      document.getElementById("signin-form").addEventListener("submit", async (e) => {
         e.preventDefault();
         const btn = document.getElementById("signin-btn");
         const errEl = document.getElementById("signin-error");
-        const username = document
-          .getElementById("signin-username")
-          .value.trim();
+        const username = document.getElementById("signin-username").value.trim();
         const password = document.getElementById("signin-password").value;
-
-        errEl.style.display = "none";
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span> Signing in…';
-
-        try {
-          // Login returns 204 and sets the HttpOnly cookie on success
-          const res = await api("/auth/login", "POST", { username, password });
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            // Handle rate limit response
-            if (res.status === 429)
-              throw new Error("Too many login attempts. Please wait a minute.");
-            throw new Error(err.detail || "Invalid username or password.");
-          }
-
-          // Fetch user claims from the server to decide where to redirect
-          const user = await fetchCurrentUser();
-          window.location.href =
-            user && user.is_admin ? "/admin" : "/dashboard";
-        } catch (err) {
-          errEl.textContent = err.message;
-          errEl.style.display = "block";
-        } finally {
-          btn.disabled = false;
-          btn.textContent = "Sign In";
+        errEl.hidden = true;
+        if (!username || !password) {
+          errEl.textContent = "Enter your username and password.";
+          errEl.hidden = false;
+          return;
         }
-      }
+        btn.disabled = true;
+        btn.textContent = "Signing in…";
+        try {
+          await apiJson("/auth/login", "POST", { username, password });
+          const user = await fetchCurrentUser();
+          window.location.href = user && user.is_admin ? "/admin" : "/dashboard";
+        } catch (err) {
+          errEl.textContent = err.status === 429 ? "Too many sign-in attempts. Wait a minute and try again." : err.message;
+          errEl.hidden = false;
+          btn.disabled = false;
+          btn.textContent = "Sign in";
+        }
+      });
     </script>
   </body>
 </html>
-
-

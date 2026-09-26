@@ -154,7 +154,7 @@ async def protected_redoc(current_user: dict = AdminDep):
     return get_redoc_html(openapi_url="/openapi.json", title="SpondBot API")
 
 
-# Catch-all for assets (style.css, app.js) — sandboxed to the frontend dir
+# Catch-all for assets (css, js) — sandboxed to the frontend dir
 @app.get("/{path:path}")
 async def catch_all(path: str):
     # Resolve to an absolute path and verify it stays inside frontend/

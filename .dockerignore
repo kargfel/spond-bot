@@ -32,3 +32,12 @@ _Multi-User*
 .pytest_cache/
 htmlcov/
 .coverage
+
+# Frontend test tooling (not needed at runtime)
+node_modules/
+tests/frontend/
+package.json
+package-lock.json
+playwright.config.js
+test-results/
+playwright-report/

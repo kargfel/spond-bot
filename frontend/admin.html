@@ -2,1466 +2,243 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SpondBot — Admin</title>
-    <meta name="description" content="SpondBot administration dashboard." />
-    <link rel="stylesheet" href="style.css?v=6" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Admin · SpondBot</title>
+    <meta name="description" content="SpondBot administration: answer queue, timeline, accounts, log and timing charts." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap" />
+    <link rel="stylesheet" href="admin.css?v=1" />
     <script
       src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
       integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g"
       crossorigin="anonymous"
+      defer
     ></script>
-    <style>
-      /* Admin-specific local overrides — only things style.css can't do */
-      .admin-section {
-        margin-bottom: 2rem;
-      }
-      .toggle-cell {
-        display: flex;
-        align-items: center;
-      }
-      /* Error cell in table rows */
-      .error-cell {
-        max-width: 180px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: 0.75rem;
-        color: var(--status-red);
-        cursor: help;
-      }
-    </style>
   </head>
   <body>
-    <!-- ── Mobile Header (phones only) ─────────────────────────────── -->
-    <div class="mobile-header">
-      <div class="mobile-header-logo">Spond<span class="logo-dim">Bot</span> <span style="font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;background:rgba(64,138,113,0.2);color:var(--accent);border:1px solid var(--border);border-radius:4px;padding:1px 5px">Admin</span></div>
-      <div class="mobile-header-right">
-        <button class="btn btn-outline btn-sm" id="mobile-sync-btn" onclick="doSync()">${ICON.sync}</button>
-        <div class="mobile-header-avatar" id="mobile-admin-avatar">A</div>
+    <header class="bar">
+      <span class="brand">spondbot<span>/admin</span></span>
+      <nav class="views" aria-label="Admin views">
+        <a href="#queue" data-view="queue">Queue</a>
+        <a href="#timeline" data-view="timeline">Timeline</a>
+        <a href="#users" data-view="users">Users</a>
+        <a href="#log" data-view="log">Log</a>
+        <a href="#charts" data-view="charts">Charts</a>
+      </nav>
+      <div class="bar-right">
+        <span class="live" id="live" hidden>live</span>
+        <button class="btn" type="button" id="sync-btn">Sync now</button>
+        <a class="btn btn-quiet hide-narrow" href="/dashboard">My events</a>
+        <div class="account">
+          <button class="avatar-btn" id="account-btn" aria-label="Account" aria-haspopup="menu" aria-expanded="false" aria-controls="account-menu">A</button>
+          <div class="menu" id="account-menu" role="menu" aria-label="Account" hidden>
+            <a role="menuitem" href="/dashboard">My events</a>
+            <button role="menuitem" type="button" id="menu-signout">Sign out</button>
+          </div>
+        </div>
       </div>
-    </div>
+    </header>
 
-    <div class="app-shell">
-      <!-- ── Sidebar ─────────────────────────────────────────────── -->
-      <aside class="sidebar">
-        <div class="sidebar-logo">
-          <span class="sidebar-logo-text">SpondBot</span>
-          <span class="sidebar-logo-badge">Admin</span>
-        </div>
-        <nav class="sidebar-nav" id="admin-nav">
-          <button
-            class="sidebar-item active"
-            data-view="events"
-            onclick="switchView('events', this)"
-          >
-            ${ICON.events} Events
-          </button>
-          <button
-            class="sidebar-item"
-            data-view="users"
-            onclick="switchView('users', this)"
-          >
-            ${ICON.user} Users
-          </button>
-          <button
-            class="sidebar-item"
-            data-view="rsvp-log"
-            onclick="switchView('rsvp-log', this)"
-          >
-            ${ICON.shield} RSVP Log
-          </button>
-          <button
-            class="sidebar-item"
-            data-view="stats-charts"
-            onclick="switchView('stats-charts', this)"
-          >
-            ${ICON.chart} Charts
-          </button>
-          <button class="sidebar-item" data-view="sync" onclick="doSync()">
-            ${ICON.sync} Trigger Sync
-          </button>
-          <a class="sidebar-item" href="/dashboard">
-            ${ICON.overview} My Dashboard
-          </a>
-        </nav>
-        <div class="sidebar-footer">
-          <div class="sidebar-user">
-            <div class="avatar" id="admin-avatar">A</div>
-            <div>
-              <div class="sidebar-username" id="admin-username">Admin</div>
-              <div
-                class="sidebar-role"
-                style="font-size: 0.7rem; color: var(--mint)"
-              >
-                Administrator
-              </div>
-            </div>
+    <main class="main">
+      <!-- ── Queue ─────────────────────────────────────────────────── -->
+      <section class="view" id="view-queue" aria-labelledby="queue-title">
+        <h1 class="visually-hidden" id="queue-title">Queue</h1>
+        <div class="hero">
+          <div class="next" data-testid="next-fire" id="next-fire">
+            <span class="label">Next answer fires in</span>
+            <div class="cd idle" data-testid="countdown" id="next-countdown">--:--:--</div>
+            <p class="next-title" id="next-title">Loading…</p>
+            <p class="next-sub mono" id="next-sub"></p>
           </div>
-          <button
-            class="btn btn-ghost btn-sm"
-            style="padding-left: 0"
-            onclick="signOut()"
-          >
-            ${ICON.logout} Sign Out
-          </button>
-        </div>
-      </aside>
-
-      <!-- ── Main Content ───────────────────────────────────────── -->
-      <main class="page-content-full">
-        <!-- Stats Bar -->
-        <div class="stats-bar" id="stats-bar">
-          <div class="stat-card">
-            <div class="stat-value" id="stat-users">—</div>
-            <div class="stat-label">Total Users</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="stat-events">—</div>
-            <div class="stat-label">Total Events</div>
-          </div>
-          <div class="stat-card">
-            <div
-              class="stat-value"
-              id="stat-pending"
-              style="color: var(--status-amber)"
-            >
-              —
-            </div>
-            <div class="stat-label">Pending</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="stat-processed" style="color: var(--status-green)">—</div>
-            <div class="stat-label">Processed</div>
-          </div>
-          <div class="stat-card">
-            <div
-              class="stat-value"
-              id="stat-failed"
-              style="color: var(--status-red)"
-            >
-              —
-            </div>
-            <div class="stat-label">Failed</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="stat-last-discovery" style="font-size:0.75rem;font-weight:500">—</div>
-            <div class="stat-label">Last Discovery</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="stat-p50" style="color: var(--accent)">—</div>
-            <div class="stat-label">RSVP p50 (ms)</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="stat-p95">—</div>
-            <div class="stat-label">RSVP p95 (ms)</div>
-          </div>
+          <dl class="counters" data-testid="counters">
+            <div class="warn"><dt>Armed</dt><dd data-testid="count-armed" id="count-armed">–</dd></div>
+            <div><dt>No answer</dt><dd data-testid="count-open" id="count-open">–</dd></div>
+            <div class="bad"><dt>Failed</dt><dd data-testid="count-failed" id="count-failed">–</dd></div>
+            <div><dt>Answered</dt><dd data-testid="count-sent" id="count-sent">–</dd></div>
+            <div><dt>Latency p50</dt><dd data-testid="count-p50" id="count-p50">–</dd></div>
+            <div><dt>Latency p95</dt><dd data-testid="count-p95" id="count-p95">–</dd></div>
+            <div><dt>Active accounts</dt><dd data-testid="count-users" id="count-users">–</dd></div>
+            <div><dt>Last sync</dt><dd class="small" data-testid="count-sync" id="count-sync">–</dd></div>
+          </dl>
         </div>
 
-        <!-- Recent Failures Widget -->
-        <div id="recent-failures-section" style="margin:0 0 1.5rem 0">
-          <div class="section-header" style="margin-bottom:0.5rem">
-            <span class="section-title" style="font-size:0.85rem">Recent Failures</span>
-            <span class="text-muted text-sm">Last 10 failed RSVPs</span>
-          </div>
-          <div id="recent-failures-wrap" style="background:var(--surface-container);border:1px solid var(--border);border-radius:10px;padding:0 1rem">
-            <div class="flex-center" style="padding: 1rem">
-              <span class="spinner" style="width: 16px; height: 16px; border-width: 2px"></span>
-            </div>
-          </div>
-        </div>
-
-        <!-- ── Events View ──────────────────────────────────────── -->
-        <div id="view-events" class="admin-section">
-          <div class="page-header" style="margin-bottom: 1rem">
-            <h1 class="page-title">Events</h1>
-          </div>
-
-          <!-- Filter bar -->
-          <div class="filter-bar mb-2">
-            <select id="f-user" class="input" onchange="loadAdminEvents()">
-              <option value="">All Users</option>
-            </select>
-            <select id="f-status" class="input" onchange="loadAdminEvents()">
-              <option value="">All Statuses</option>
-              <option value="pending">Pending</option>
-              <option value="processing">Processing</option>
-              <option value="processed">Processed</option>
+        <div class="filters">
+          <div class="field"><label for="q-account">Account</label><select class="input" id="q-account"><option value="">All accounts</option></select></div>
+          <div class="field">
+            <label for="q-state">State</label>
+            <select class="input" id="q-state">
+              <option value="">All states</option>
+              <option value="open">No answer</option>
+              <option value="armed">Armed</option>
+              <option value="sending">Sending</option>
+              <option value="sent">Answered</option>
               <option value="failed">Failed</option>
+              <option value="self">Left to member</option>
             </select>
-            <select id="f-choice" class="input" onchange="loadAdminEvents()">
-              <option value="">All Choices</option>
-              <option value="accept">Accept</option>
-              <option value="decline">Decline</option>
-              <option value="manual">Manual</option>
-            </select>
-            <input
-              id="f-search"
-              class="input search-input"
-              type="text"
-              placeholder="Search events…"
-              oninput="filterLocally()"
-            />
-            <button class="btn btn-outline" onclick="doSync()">
-              ${ICON.sync} Trigger Sync
-            </button>
           </div>
-
-          <!-- Decay toggle -->
-          <label class="past-toggle-row" for="admin-show-past">
-            <input type="checkbox" id="admin-show-past" onchange="filterLocally()" />
-            Show past &amp; expired events
-          </label>
-          <div class="refresh-bar" id="admin-decay-hint" style="display:none">
-            <span class="refresh-dot"></span>
-            <span id="admin-decay-count"></span>
-          </div>
-
-          <div class="events-list" id="events-table-wrap">
-            <div class="flex-center" style="padding: 2.5rem">
-              <span class="spinner" style="width: 22px; height: 22px; border-width: 3px"></span>
-            </div>
-          </div>
+          <div class="field grow"><label for="q-search">Search</label><input class="input" id="q-search" type="search" placeholder="Event or account" /></div>
+          <label class="check"><input type="checkbox" id="q-past" /> Include past events</label>
         </div>
 
-        <!-- ── Users View ───────────────────────────────────────── -->
-        <div id="view-users" class="admin-section hidden">
-          <div class="page-header" style="margin-bottom: 1rem">
-            <h1 class="page-title">Users</h1>
-            <button class="btn btn-primary" onclick="showAddUserModal()">
-              ${ICON.plus} Add User
-            </button>
-          </div>
+        <div class="table-wrap">
+          <table class="queue-table" aria-label="Queue">
+            <thead>
+              <tr><th>Fires at</th><th>In</th><th>Event</th><th>Account</th><th>Starts</th><th>Answer</th><th>State</th><th><span class="visually-hidden">Actions</span></th></tr>
+            </thead>
+            <tbody id="queue-body"></tbody>
+          </table>
+        </div>
+      </section>
 
-          <!-- Frontend users table -->
-          <div class="section-header">
-            <span class="section-title">Dashboard Accounts</span>
-            <span class="text-muted text-sm"
-              >Users who can log into this admin panel</span
-            >
-          </div>
-          <div class="user-cards-list mb-3" id="frontend-users-table">
-            <div class="flex-center" style="padding: 2rem">
-              <span class="spinner" style="width: 20px; height: 20px; border-width: 3px"></span>
-            </div>
-          </div>
-
-          <!-- Spond users section -->
-          <div class="section-header mt-2">
-            <div>
-              <span class="section-title">Spond Accounts</span>
-              <br /><span class="text-muted text-sm">Accounts managed by the bot</span>
-            </div>
-            <button class="btn btn-outline btn-sm" onclick="showAddSpondModal()">
-              ${ICON.plus} Add Spond Account
-            </button>
-          </div>
-          <div class="user-cards-list" id="spond-users-table">
-            <div class="flex-center" style="padding: 2rem">
-              <span class="spinner" style="width: 20px; height: 20px; border-width: 3px"></span>
-            </div>
+      <!-- ── Timeline ──────────────────────────────────────────────── -->
+      <section class="view" id="view-timeline" aria-labelledby="timeline-title" hidden>
+        <div class="view-head">
+          <div><h1 id="timeline-title">Timeline</h1><p>When registration opens for each account over the next two weeks. Select a marker for details.</p></div>
+          <div class="legend">
+            <span><i class="key-mark"></i>Armed</span>
+            <span><i class="key-mark open"></i>No automatic answer</span>
+            <span><i class="key-mark sent"></i>Answered</span>
+            <span><i class="key-mark failed"></i>Failed</span>
+            <span><i class="key-event"></i>Event starts</span>
           </div>
         </div>
+        <div class="panel tl" id="timeline"></div>
+        <div class="panel tl-detail" data-testid="timeline-detail" id="timeline-detail">
+          <p class="t-dim">Select a marker to see the event.</p>
+        </div>
+      </section>
 
-        <!-- ── RSVP Log View ─────────────────────────────────────────── -->
-        <div id="view-rsvp-log" class="admin-section hidden">
-          <div class="page-header" style="margin-bottom: 1rem">
-            <h1 class="page-title">RSVP Audit Log</h1>
-            <button id="rl-refresh-btn" class="btn btn-outline btn-sm" onclick="loadRsvpLog()">
-              Refresh
-            </button>
-          </div>
-          <div class="filter-bar mb-2">
-            <select id="rl-user" class="input" onchange="loadRsvpLog()">
-              <option value="">All Users</option>
-            </select>
-            <select id="rl-outcome" class="input" onchange="loadRsvpLog()">
-              <option value="">All Outcomes</option>
-              <option value="success">Success</option>
-              <option value="retry_success">Retry Success</option>
+      <!-- ── Users ─────────────────────────────────────────────────── -->
+      <section class="view" id="view-users" aria-labelledby="users-title" hidden>
+        <div class="view-head">
+          <div><h1 id="users-title">Users</h1><p>Logins for this dashboard, and the Spond accounts SpondBot answers for.</p></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <caption>Dashboard logins</caption>
+            <thead><tr><th>Username</th><th>Role</th><th>Spond account</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+            <tbody id="logins-body"></tbody>
+          </table>
+        </div>
+        <div><button class="btn" type="button" id="add-login-btn">Add login</button></div>
+        <div class="table-wrap">
+          <table>
+            <caption>Spond accounts</caption>
+            <thead><tr><th>Name</th><th>Spond login</th><th>Profile</th><th>Active</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+            <tbody id="spond-body"></tbody>
+          </table>
+        </div>
+        <div><button class="btn" type="button" id="add-spond-btn">Connect Spond account</button></div>
+      </section>
+
+      <!-- ── Log ───────────────────────────────────────────────────── -->
+      <section class="view" id="view-log" aria-labelledby="log-title" hidden>
+        <div class="view-head">
+          <div><h1 id="log-title">Log</h1><p>Every answer SpondBot tried to send, newest first. Latency is measured from registration opening.</p></div>
+        </div>
+        <div class="filters">
+          <div class="field"><label for="log-account">Account</label><select class="input" id="log-account"><option value="">All accounts</option></select></div>
+          <div class="field">
+            <label for="log-outcome">Outcome</label>
+            <select class="input" id="log-outcome">
+              <option value="">All outcomes</option>
+              <option value="success">Succeeded</option>
+              <option value="retry_success">Succeeded after retry</option>
               <option value="failed">Failed</option>
             </select>
           </div>
-          <div id="rsvp-log-wrap">
-            <div class="flex-center" style="padding: 2.5rem">
-              <span class="spinner" style="width: 22px; height: 22px; border-width: 3px"></span>
+        </div>
+        <div class="table-wrap">
+          <table aria-label="Answer log">
+            <thead><tr><th>Fired at</th><th>Account</th><th>Event</th><th>Answer</th><th>Outcome</th><th class="num">Latency</th><th class="num">Retries</th><th>Error</th></tr></thead>
+            <tbody id="log-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── Charts ────────────────────────────────────────────────── -->
+      <section class="view" id="view-charts" aria-labelledby="charts-title" hidden>
+        <div class="view-head">
+          <div><h1 id="charts-title">Charts</h1><p>How fast answers go out after registration opens, and how often they succeed.</p></div>
+          <div class="filters">
+            <div class="field"><label for="chart-days">Range</label>
+              <select class="input" id="chart-days"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option></select>
             </div>
+            <div class="field"><label for="chart-account">Account</label><select class="input" id="chart-account"><option value="">All accounts</option></select></div>
           </div>
         </div>
-
-        <!-- ── Charts & Scheduler View ──────────────────────────────── -->
-        <div id="view-stats-charts" class="admin-section hidden">
-          <div class="page-header" style="margin-bottom: 1rem">
-            <h1 class="page-title">Charts & Scheduler</h1>
-            <div style="display:flex;gap:0.5rem">
-              <select id="chart-days" class="input" onchange="loadCharts()" style="width:auto">
-                <option value="7">Last 7 days</option>
-                <option value="30" selected>Last 30 days</option>
-                <option value="90">Last 90 days</option>
-              </select>
-              <select id="chart-user" class="input" onchange="loadCharts()" style="width:auto">
-                <option value="">All Users</option>
-              </select>
+        <p class="t-dim" id="chart-note" hidden>The chart library could not load. The table below has the same numbers.</p>
+        <div class="charts">
+          <div class="panel chart-card">
+            <h2>Latency per answer</h2>
+            <p>Milliseconds between registration opening and Spond accepting the answer.</p>
+            <div class="chart-box"><canvas id="chart-latency" role="img" aria-label="Latency per answer"></canvas></div>
+          </div>
+          <div class="panel chart-card">
+            <h2>Outcomes per day</h2>
+            <div class="chart-legend">
+              <span><i style="background: var(--chart-success)"></i>Succeeded</span>
+              <span><i style="background: var(--chart-retry)"></i>After retry</span>
+              <span><i style="background: var(--chart-failed)"></i>Failed</span>
             </div>
-          </div>
-
-          <!-- Latency scatter -->
-          <div class="stat-card" style="margin-bottom:1.5rem;padding:1.5rem">
-            <div class="section-title" style="margin-bottom:1rem">RSVP Latency (ms after invite_time)</div>
-            <canvas id="chart-latency" height="120"></canvas>
-          </div>
-
-          <!-- Daily success rate -->
-          <div class="stat-card" style="margin-bottom:1.5rem;padding:1.5rem">
-            <div class="section-title" style="margin-bottom:1rem">Daily RSVP Outcomes</div>
-            <canvas id="chart-daily" height="120"></canvas>
-          </div>
-
-          <!-- Per-user table -->
-          <div class="stat-card" style="margin-bottom:1.5rem;padding:1.5rem">
-            <div class="section-title" style="margin-bottom:1rem">Per-User Breakdown</div>
-            <div id="chart-per-user-table"></div>
-          </div>
-
-          <!-- Scheduler panel -->
-          <div class="page-header" style="margin:2rem 0 1rem">
-            <h2 class="page-title" style="font-size:1.1rem">Armed Snipers</h2>
-            <button class="btn btn-outline btn-sm" onclick="loadScheduler()">🔄 Refresh</button>
-          </div>
-          <div id="scheduler-list">
-            <div class="flex-center" style="padding:2rem">
-              <span class="spinner" style="width:22px;height:22px;border-width:3px"></span>
-            </div>
+            <div class="chart-box"><canvas id="chart-daily" role="img" aria-label="Outcomes per day"></canvas></div>
           </div>
         </div>
-      </main>
-    </div>
-
-    <!-- ── Mobile Bottom Nav ─────────────────────────────────────────── -->
-    <nav class="mobile-nav">
-      <button class="mobile-nav-item active" id="mnav-events" onclick="switchView('events', null); this.classList.add('active'); document.getElementById('mnav-users').classList.remove('active')">
-        ${ICON.events}<span>Events</span>
-      </button>
-      <button class="mobile-nav-item" id="mnav-users" onclick="switchView('users', null); this.classList.add('active'); document.getElementById('mnav-events').classList.remove('active')">
-        ${ICON.user}<span>Users</span>
-      </button>
-      <a class="mobile-nav-item" href="/dashboard">
-        ${ICON.overview}<span>Dashboard</span>
-      </a>
-      <button class="mobile-nav-item" onclick="signOut()">
-        ${ICON.logout}<span>Sign Out</span>
-      </button>
-    </nav>
-
-    <!-- Edit Event Decision Modal -->
-    <div class="modal-overlay hidden" id="edit-event-modal">
-      <div class="modal">
-        <h2 class="modal-title">Edit RSVP Decision</h2>
-        <p class="text-muted text-sm mb-2" id="edit-event-title"></p>
-        <div class="field">
-          <label>RSVP Choice</label>
-          <select id="edit-choice" class="input">
-            <option value="accept">Accept</option>
-            <option value="decline">Decline</option>
-            <option value="manual">Manual</option>
-          </select>
+        <div class="table-wrap">
+          <table>
+            <caption>Per account</caption>
+            <thead><tr><th>Account</th><th class="num">Answers</th><th class="num">Succeeded</th><th class="num">p50</th><th class="num">p95</th></tr></thead>
+            <tbody id="per-account-body"></tbody>
+          </table>
         </div>
-        <div class="modal-footer">
-          <button
-            class="btn btn-ghost"
-            onclick="closeModal('edit-event-modal')"
-          >
-            Cancel
-          </button>
-          <button class="btn btn-primary" onclick="saveEventDecision()">
-            Save
-          </button>
+      </section>
+    </main>
+
+    <!-- ── Dialogs ───────────────────────────────────────────────────── -->
+    <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+      <div class="dialog-body">
+        <h2 id="confirm-title" data-confirm-title></h2>
+        <p data-confirm-body></p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-quiet" data-close>Keep it</button>
+          <button type="button" class="btn btn-sig" data-confirm-ok>OK</button>
         </div>
       </div>
-    </div>
+    </dialog>
 
-    <!-- Add Frontend User Modal -->
-    <div class="modal-overlay hidden" id="add-user-modal">
-      <div class="modal">
-        <h2 class="modal-title">Create Dashboard Account</h2>
-        <div style="display: flex; flex-direction: column; gap: 1rem">
-          <div class="field">
-            <label>Username</label>
-            <input
-              id="new-username"
-              class="input"
-              type="text"
-              placeholder="e.g. felix"
-            />
-          </div>
-          <div class="field">
-            <label>Password</label>
-            <input
-              id="new-password"
-              class="input"
-              type="password"
-              placeholder="Min. 8 characters"
-              minlength="8"
-            />
-          </div>
-          <div class="field">
-            <label>Link to Spond Account</label>
-            <select id="new-linked-user" class="input">
-              <option value="">None (Admin only)</option>
-            </select>
-          </div>
-          <div
-            class="field"
-            style="flex-direction: row; align-items: center; gap: 0.75rem"
-          >
-            <label class="toggle">
-              <input type="checkbox" id="new-is-admin" />
-              <span class="toggle-slider"></span>
-            </label>
-            <span class="text-sm">Admin privileges</span>
-          </div>
+    <dialog id="login-dialog" aria-labelledby="login-dialog-title">
+      <form class="dialog-body" id="login-form" novalidate>
+        <h2 id="login-dialog-title">Add login</h2>
+        <p class="form-error" role="alert" data-error hidden></p>
+        <div class="field" data-create><label for="login-username">Username</label><input class="input" id="login-username" type="text" autocomplete="off" autocapitalize="none" /></div>
+        <div class="field"><label for="login-password" id="login-password-label">Password</label><input class="input" id="login-password" type="password" autocomplete="new-password" /></div>
+        <div class="field"><label for="login-linked">Spond account</label><select class="input" id="login-linked"></select></div>
+        <label class="check"><input type="checkbox" id="login-admin" /> Administrator</label>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-quiet" data-close>Cancel</button>
+          <button type="submit" class="btn btn-sig" id="login-submit">Create login</button>
         </div>
-        <div id="add-user-error" class="auth-error mt-1"></div>
-        <div class="modal-footer">
-          <button class="btn btn-ghost" onclick="closeModal('add-user-modal')">
-            Cancel
-          </button>
-          <button class="btn btn-primary" onclick="createFrontendUser()">
-            Create
-          </button>
+      </form>
+    </dialog>
+
+    <dialog id="spond-dialog" aria-labelledby="spond-dialog-title">
+      <form class="dialog-body" id="spond-form" novalidate>
+        <h2 id="spond-dialog-title">Connect Spond account</h2>
+        <p>SpondBot signs in to Spond with these details to answer invites. The password is stored encrypted.</p>
+        <p class="form-error" role="alert" data-error hidden></p>
+        <div class="field"><label for="spond-login">Spond login (email or phone)</label><input class="input" id="spond-login" type="text" autocomplete="off" /></div>
+        <div class="field"><label for="spond-password">Spond password</label><input class="input" id="spond-password" type="password" autocomplete="off" /></div>
+        <div class="field"><label for="spond-name">Display name</label><input class="input" id="spond-name" type="text" placeholder="Defaults to the part before @" /></div>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-quiet" data-close>Cancel</button>
+          <button type="submit" class="btn btn-sig" id="spond-submit">Connect</button>
         </div>
-      </div>
-    </div>
-
-    <!-- Edit Frontend User Modal -->
-    <div class="modal-overlay hidden" id="edit-frontend-user-modal">
-      <div class="modal">
-        <h2 class="modal-title">Edit User Account</h2>
-        <p class="text-muted text-sm mb-2" id="edit-fu-username-label"></p>
-        <div style="display: flex; flex-direction: column; gap: 1rem">
-          <div class="field">
-            <label>Link to Spond Account</label>
-            <select id="edit-fu-linked-user" class="input"></select>
-          </div>
-          <div
-            class="field"
-            style="flex-direction: row; align-items: center; gap: 0.75rem"
-          >
-            <label class="toggle">
-              <input type="checkbox" id="edit-fu-is-admin" />
-              <span class="toggle-slider"></span>
-            </label>
-            <span class="text-sm">Admin privileges</span>
-          </div>
-        </div>
-        <!-- Password Reset Section -->
-        <div
-          style="
-            margin-top: 1.25rem;
-            padding-top: 1.25rem;
-            border-top: 1px solid var(--surface-container-high);
-          "
-        >
-          <div
-            class="section-title"
-            style="font-size: 0.8rem; margin-bottom: 0.75rem"
-          >
-            Reset Password
-            <span class="text-muted" style="font-weight: 400"
-              >(leave blank to keep current)</span
-            >
-          </div>
-          <div class="field">
-            <label
-              >New Password
-              <span style="font-weight: 400">(min. 8 chars)</span></label
-            >
-            <input
-              id="edit-fu-new-password"
-              class="input"
-              type="password"
-              placeholder="••••••••"
-              minlength="8"
-              autocomplete="new-password"
-            />
-          </div>
-        </div>
-        <div
-          id="edit-fu-error"
-          class="auth-error"
-          style="margin-top: 0.5rem"
-        ></div>
-        <div class="modal-footer">
-          <button
-            class="btn btn-ghost"
-            onclick="closeModal('edit-frontend-user-modal')"
-          >
-            Cancel
-          </button>
-          <button class="btn btn-primary" onclick="saveEditFrontendUser()">
-            Save
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Add Spond User Modal -->
-    <div class="modal-overlay hidden" id="add-spond-modal">
-      <div class="modal">
-        <h2 class="modal-title">Link Spond Account</h2>
-        <p class="text-muted text-sm mb-2">
-          Automate RSVPs for a real Spond.com account.
-        </p>
-        <div style="display: flex; flex-direction: column; gap: 1rem">
-          <div class="field">
-            <label>Spond Login (Email/Phone)</label>
-            <input
-              id="spond-login"
-              class="input"
-              type="text"
-              placeholder="e.g. user@example.com"
-            />
-          </div>
-          <div class="field">
-            <label>Spond Password</label>
-            <input id="spond-password" class="input" type="password" />
-          </div>
-          <div class="field">
-            <label>Display Name (Internal)</label>
-            <input
-              id="spond-display-name"
-              class="input"
-              type="text"
-              placeholder="e.g. Alice - Soccer"
-            />
-          </div>
-        </div>
-        <div id="add-spond-error" class="auth-error mt-1"></div>
-        <div class="modal-footer">
-          <button class="btn btn-ghost" onclick="closeModal('add-spond-modal')">
-            Cancel
-          </button>
-          <button
-            class="btn btn-primary"
-            id="add-spond-btn"
-            onclick="addSpondAccount()"
-          >
-            Connect
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div id="toast-container"></div>
-
-    <script src="app.js?v=7"></script>
-    <script>
-      // Fix template literals in static HTML
-      document.querySelectorAll("[data-view]").forEach((el) => {
-        const icons = [ICON.events, ICON.user, ICON.shield, ICON.chart, ICON.sync];
-        const labels = [" Events", " Users", " RSVP Log", " Charts", " Trigger Sync"];
-        const i = ["events", "users", "rsvp-log", "stats-charts", "sync"].indexOf(
-          el.dataset.view ?? el.getAttribute("onclick")?.match(/'(\w+)'/)?.[1],
-        );
-        if (i >= 0) el.innerHTML = icons[i] + labels[i];
-      });
-      document.querySelector(".sidebar-footer .btn-ghost").innerHTML =
-        ICON.logout + " Sign Out";
-      document
-        .getElementById("edit-event-modal")
-        .querySelector(".btn-outline")
-        ?.remove();
-      // Render sidebar icons
-      document.querySelector('.sidebar-nav a[href="/dashboard"]').innerHTML =
-        ICON.overview + " My Dashboard";
-      // Mobile nav icons
-      document.getElementById("mnav-events").innerHTML = ICON.events + "<span>Events</span>";
-      document.getElementById("mnav-users").innerHTML = ICON.user + "<span>Users</span>";
-      document.querySelector(".mobile-nav a[href='/dashboard']").innerHTML = ICON.overview + "<span>Dashboard</span>";
-      document.querySelector(".mobile-nav .mobile-nav-item:last-child").innerHTML = ICON.logout + "<span>Sign Out</span>";
-      // Sync button
-      document.getElementById("mobile-sync-btn").innerHTML = ICON.sync;
-      setTimeout(() => {
-        const sb = document.querySelector(".filter-bar .btn-outline");
-        if (sb) sb.innerHTML = ICON.sync + " Trigger Sync";
-        const rlRefreshBtn = document.getElementById("rl-refresh-btn");
-        if (rlRefreshBtn) rlRefreshBtn.innerHTML = ICON.sync + " Refresh";
-        const ab = document.querySelector("#view-users .btn-primary");
-        if (ab) ab.innerHTML = ICON.plus + " Add User";
-        const sasb = document.querySelector("#view-users .btn-outline");
-        if (sasb) sasb.innerHTML = ICON.plus + " Add Spond Account";
-      }, 0);
-
-      // ── State ─────────────────────────────────────────────────────────
-      let adminPayload = null;
-      let allEvents = [];
-      let allSpondUsers = [];
-      let editEventId = null;
-      let editFrontendUserId = null;
-
-      // ── Init ───────────────────────────────────────────────────────────
-      async function init() {
-        // requireAdmin() calls /auth/me, 403s non-admins to dashboard, 401s to login
-        adminPayload = await requireAdmin();
-
-        document.getElementById("admin-username").textContent =
-          adminPayload.username;
-        document.getElementById("admin-avatar").textContent = initials(
-          adminPayload.username,
-        );
-        document.getElementById("mobile-admin-avatar").textContent = initials(
-          adminPayload.username,
-        );
-
-        // Load Spond users FIRST so getUserName() has data when events render
-        await loadSpondUsers();
-        await Promise.all([loadStats(), loadAdminEvents()]);
-        setInterval(loadStats, 30_000);
-        connectAdminStream();
-      }
-
-      // ── SSE Stream ─────────────────────────────────────────────────────
-      function connectAdminStream() {
-        const es = new EventSource('/api/v1/admin/stream', { withCredentials: true });
-
-        es.addEventListener('rsvp_fired', (e) => {
-          const d = JSON.parse(e.data);
-          showToast(`RSVP ${d.outcome}: "${d.heading}" (${d.choice})`, d.outcome === 'success' ? 'success' : 'error');
-          loadStats();
-          const logView = document.getElementById('view-rsvp-log');
-          if (logView && !logView.classList.contains('hidden')) {
-            loadRsvpLog();
-          }
-        });
-
-        es.addEventListener('discovery_completed', () => {
-          loadStats();
-          const eventsView = document.getElementById('view-events');
-          if (eventsView && !eventsView.classList.contains('hidden')) {
-            loadAdminEvents();
-          }
-        });
-
-        es.addEventListener('scheduler_changed', () => {
-          const chartsView = document.getElementById('view-stats-charts');
-          if (chartsView && !chartsView.classList.contains('hidden')) {
-            loadScheduler();
-          }
-        });
-
-        es.onerror = () => {};
-      }
-
-      // ── View switching ─────────────────────────────────────────────────
-      function switchView(view, btn) {
-        document.getElementById('view-events').classList.toggle('hidden', view !== 'events');
-        document.getElementById('view-users').classList.toggle('hidden', view !== 'users');
-        document.getElementById('view-rsvp-log').classList.toggle('hidden', view !== 'rsvp-log');
-        document.getElementById('view-stats-charts').classList.toggle('hidden', view !== 'stats-charts');
-        document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
-        if (btn) btn.classList.add('active');
-        if (view === 'users') loadUsersView();
-        if (view === 'rsvp-log') loadRsvpLog();
-        if (view === 'stats-charts') { loadCharts(); loadScheduler(); }
-      }
-
-      // ── Stats (from /admin/stats) ──────────────────────────────────────
-      async function loadStats() {
-        try {
-          const res = await api('/admin/stats');
-          if (!res.ok) return;
-          const d = await res.json();
-
-          document.getElementById('stat-users').textContent = d.active_users;
-          document.getElementById('stat-events').textContent = d.total_events;
-          document.getElementById('stat-pending').textContent = d.events_pending;
-          document.getElementById('stat-failed').textContent = d.events_failed;
-          document.getElementById('stat-processed').textContent = d.events_processed ?? '—';
-
-          renderLastDiscovery(d.last_discovery_at);
-          renderRecentFailures(d.recent_failures);
-          document.getElementById('stat-p50').textContent =
-            d.rsvp_p50_ms != null ? d.rsvp_p50_ms : '—';
-          document.getElementById('stat-p95').textContent =
-            d.rsvp_p95_ms != null ? d.rsvp_p95_ms : '—';
-          const sampleEl = document.getElementById('stat-p50');
-          if (sampleEl && d.rsvp_sample_count) {
-            sampleEl.title = `Based on ${d.rsvp_sample_count} sample(s)`;
-          }
-        } catch {}
-      }
-
-      function renderLastDiscovery(isoTs) {
-        const el = document.getElementById('stat-last-discovery');
-        if (!el) return;
-        el.textContent = isoTs ? fmtDate(isoTs) : 'Never';
-      }
-
-      function renderRecentFailures(failures) {
-        const wrap = document.getElementById('recent-failures-wrap');
-        if (!wrap) return;
-        if (!failures.length) {
-          wrap.innerHTML = `<div class="empty-state" style="padding:1rem"><div class="empty-state-title" style="font-size:0.85rem">No recent failures</div></div>`;
-          return;
-        }
-        wrap.innerHTML = failures.map(f => `
-          <div style="padding:0.6rem 0;border-bottom:1px solid var(--surface-container-high);font-size:0.82rem">
-            <div style="display:flex;justify-content:space-between;gap:0.5rem;align-items:flex-start">
-              <span style="font-weight:500;color:var(--text)">${escHtml(f.heading || '—')}</span>
-              <span style="color:var(--text-muted);white-space:nowrap;font-size:0.75rem">${fmtDate(f.updated_at)}</span>
-            </div>
-            <div style="color:var(--mint);font-size:0.75rem">${escHtml(f.user_display_name)}</div>
-            ${f.error_message ? `<div style="color:var(--status-red);font-size:0.75rem;margin-top:0.2rem">${escHtml(f.error_message)}</div>` : ''}
-          </div>`).join('');
-      }
-
-      // ── Load Spond Users (for filter dropdown) ─────────────────────────
-      async function loadSpondUsers() {
-        try {
-          const res = await api("/spond-accounts");
-          if (!res.ok) return;
-          allSpondUsers = await res.json();
-          const sel = document.getElementById("f-user");
-          allSpondUsers.forEach((u) => {
-            const opt = document.createElement("option");
-            opt.value = u.id;
-            opt.textContent = u.display_name;
-            sel.appendChild(opt);
-          });
-          // also populate modal dropdown
-          const linkSel = document.getElementById("new-linked-user");
-          linkSel.innerHTML = '<option value="">None (Admin only)</option>';
-          allSpondUsers.forEach((u) => {
-            const opt = document.createElement("option");
-            opt.value = u.id;
-            opt.textContent = `${u.display_name} (${u.login})`;
-            linkSel.appendChild(opt);
-          });
-          // Also populate RSVP log user filter
-          const rlSel = document.getElementById('rl-user');
-          if (rlSel) {
-            rlSel.innerHTML = '<option value="">All Users</option>';
-            allSpondUsers.forEach(u => {
-              const opt = document.createElement('option');
-              opt.value = u.id;
-              opt.textContent = u.display_name;
-              rlSel.appendChild(opt);
-            });
-          }
-        } catch {}
-      }
-
-      // ── Load Events (admin view) ───────────────────────────────────────
-      async function loadAdminEvents() {
-        const wrap = document.getElementById("events-table-wrap");
-        wrap.innerHTML = `<div class="flex-center" style="padding:2.5rem"><span class="spinner" style="width:22px;height:22px;border-width:3px;"></span></div>`;
-
-        const user_id = document.getElementById("f-user")?.value;
-        const status = document.getElementById("f-status")?.value;
-        const choice = document.getElementById("f-choice")?.value;
-
-        let url = "/events?all=true&";
-        if (user_id) url += `user_id=${user_id}&`;
-        if (status) url += `status=${status}&`;
-        if (choice) url += `choice=${choice}&`;
-
-        try {
-          const res = await api(url);
-          if (!res.ok) throw new Error("Failed");
-          let data = await res.json();
-
-          allEvents = data.sort((a, b) => {
-            const timeA = a.start_timestamp
-              ? new Date(a.start_timestamp).getTime()
-              : Infinity;
-            const timeB = b.start_timestamp
-              ? new Date(b.start_timestamp).getTime()
-              : Infinity;
-            return timeA - timeB;
-          });
-
-          filterLocally();
-        } catch (err) {
-          wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">Failed to load events</div></div>`;
-        }
-      }
-
-      function filterLocally() {
-        const q = (document.getElementById("f-search")?.value || "").toLowerCase();
-        const showPast = document.getElementById("admin-show-past")?.checked ?? false;
-
-        // Apply text search first
-        let filtered = q
-          ? allEvents.filter((e) => (e.heading || "").toLowerCase().includes(q) ||
-              getUserName(e.user_id).toLowerCase().includes(q))
-          : allEvents;
-
-        // Apply decay filter
-        const visible = filtered.filter((e) => shouldShowEvent(e, showPast));
-        const hiddenCount = filtered.length - visible.length;
-
-        // Show/hide decay hint
-        const hint = document.getElementById("admin-decay-hint");
-        const countEl = document.getElementById("admin-decay-count");
-        if (hiddenCount > 0 && !showPast) {
-          countEl.textContent = `${hiddenCount} past event${hiddenCount !== 1 ? 's' : ''} hidden — check the toggle above to show them`;
-          hint.style.display = "flex";
-        } else {
-          hint.style.display = "none";
-        }
-
-        renderAdminEventCards(visible);
-      }
-
-      function getUserName(userId) {
-        const u = allSpondUsers.find((u) => u.id === userId);
-        return u ? u.display_name : (userId?.slice(0, 8) + "…");
-      }
-
-      function getSpondUserName(linkedUserId, spondUsers) {
-        if (!linkedUserId) return null;
-        const found = spondUsers.find(u => u.id === linkedUserId);
-        return found ? found.display_name : null;
-      }
-
-      function renderAdminEventCards(events) {
-        const wrap = document.getElementById("events-table-wrap");
-        if (!events.length) {
-          wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">No events match your filters</div><div class="empty-state-sub">Try adjusting the filters or enable "Show past &amp; expired events"</div></div>`;
-          return;
-        }
-        wrap.innerHTML = events.map((ev) => {
-          const statusCls = ev.status === 'processed' ? 'processed'
-            : ev.status === 'pending' ? 'pending'
-            : ev.status === 'failed' ? 'failed'
-            : 'processing';
-          const userName = escHtml(getUserName(ev.user_id));
-          const countdown = timeUntil(ev.start_timestamp);
-          const countdownHtml = countdown
-            ? `<span class="event-countdown ${countdown.cls}">${ICON.timer} ${countdown.label}</span>`
-            : '';
-          const errorHtml = ev.error_message
-            ? `<div class="event-error" title="${escHtml(ev.error_message)}">${escHtml(ev.error_message)}</div>`
-            : '';
-          return `
-            <div class="event-card">
-              <div class="event-card-bar ${statusCls}"></div>
-              <div class="event-card-body">
-                <div class="event-card-info">
-                  <div class="event-title">${escHtml(ev.heading || '—')}</div>
-                  <div class="event-meta">
-                    <span class="event-meta-item" style="color:var(--mint);font-weight:500">${userName}</span>
-                    <span class="event-meta-item">${ICON.calendar} ${fmtDate(ev.start_timestamp)}</span>
-                  </div>
-                  ${countdownHtml}
-                  ${errorHtml}
-                </div>
-                <div class="event-card-actions">
-                  <div class="event-badges">
-                    ${choiceBadge(ev.user_choice)}
-                    ${statusBadge(ev.status)}
-                  </div>
-                  <div class="rsvp-buttons">
-                    <button class="btn btn-ghost btn-sm" onclick="openEditEvent('${ev.id}','${escHtml(ev.heading || '')}','${ev.user_choice}')">Edit</button>
-                    ${ev.status === 'failed' ? `<button class="btn btn-outline btn-sm" onclick="retryEvent('${ev.id}')">Retry</button>` : ''}
-                  </div>
-                </div>
-              </div>
-            </div>`;
-        }).join('');
-      }
-
-      // ── Edit Event Decision ────────────────────────────────────────────
-      function openEditEvent(id, heading, choice) {
-        editEventId = id;
-        document.getElementById("edit-event-title").textContent = heading;
-        document.getElementById("edit-choice").value = choice;
-        document.getElementById("edit-event-modal").classList.remove("hidden");
-      }
-
-      async function saveEventDecision() {
-        const choice = document.getElementById("edit-choice").value;
-        try {
-          const res = await api(`/events/${editEventId}`, "PATCH", {
-            user_choice: choice,
-          });
-          if (!res.ok) throw new Error((await res.json()).detail || "Failed");
-          closeModal("edit-event-modal");
-          showToast("Decision updated.", "success");
-          loadAdminEvents();
-          loadStats();
-        } catch (err) {
-          showToast(err.message, "error");
-        }
-      }
-
-      async function retryEvent(id) {
-        try {
-          const res = await api(`/events/${id}`, "PATCH", {
-            user_choice: "accept",
-          });
-          if (!res.ok) throw new Error((await res.json()).detail || "Failed");
-          showToast("Event queued for retry.", "success");
-          loadAdminEvents();
-          loadStats();
-        } catch (err) {
-          showToast(err.message, "error");
-        }
-      }
-
-      // ── Users View ─────────────────────────────────────────────────────
-      async function loadUsersView() {
-        loadFrontendUsersTable();
-        renderSpondUsersTable();
-      }
-
-      async function loadFrontendUsersTable() {
-        const wrap = document.getElementById("frontend-users-table");
-        wrap.innerHTML = `<div class="flex-center" style="padding:2rem"><span class="spinner" style="width:20px;height:20px;border-width:3px;"></span></div>`;
-        try {
-          const res = await api("/accounts");
-          if (!res.ok) throw new Error("Failed");
-          const users = await res.json();
-          if (!users.length) {
-            wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">No dashboard accounts</div></div>`;
-            return;
-          }
-          wrap.innerHTML = users.map((u) => {
-            const av = initials(u.username);
-            const linkedName = getSpondUserName(u.linked_user_id, allSpondUsers);
-            return `
-            <div class="user-card">
-              <div class="user-card-avatar">${av}</div>
-              <div class="user-card-body">
-                <div class="user-card-name">${escHtml(u.username)}</div>
-                ${linkedName ? `<div class="user-card-meta"><span class="user-card-detail">Managing: ${escHtml(linkedName)}</span></div>` : ''}
-                <div class="user-card-meta">
-                  ${u.is_admin ? '<span class="badge badge-accept">Admin</span>' : '<span class="badge badge-manual">User</span>'}
-                </div>
-              </div>
-              <div class="user-card-actions">
-                <button class="btn btn-ghost btn-sm" onclick="openEditFrontendUser('${u.id}','${escHtml(u.username)}',${u.is_admin},'${u.linked_user_id || ''}')">Edit</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteFrontendUser('${u.id}','${escHtml(u.username)}')">Del</button>
-              </div>
-            </div>`;
-          }).join('');
-        } catch {
-          wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">Failed to load</div></div>`;
-        }
-      }
-
-      function renderSpondUsersTable() {
-        const wrap = document.getElementById("spond-users-table");
-        if (!allSpondUsers.length) {
-          wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">No Spond accounts registered</div></div>`;
-          return;
-        }
-        wrap.innerHTML = allSpondUsers.map((u) => {
-          const av = initials(u.display_name);
-          const profileId = u.profile_id ? u.profile_id.slice(0, 10) + '…' : '—';
-          return `
-          <div class="user-card">
-            <div class="user-card-avatar ${u.is_active ? '' : 'inactive'}">${av}</div>
-            <div class="user-card-body">
-              <div class="user-card-name">${escHtml(u.display_name)}</div>
-              <div class="user-card-meta">
-                <span class="user-card-detail">${ICON.user} ${escHtml(u.login)}</span>
-                <span class="user-card-detail mono">${profileId}</span>
-              </div>
-            </div>
-            <div class="user-card-actions">
-              <label class="toggle" title="${u.is_active ? 'Active' : 'Inactive'}">
-                <input type="checkbox" ${u.is_active ? 'checked' : ''} onchange="toggleSpondUser('${u.id}', this.checked)">
-                <span class="toggle-slider"></span>
-              </label>
-              <button class="btn btn-danger btn-sm" onclick="deleteSpondUser('${u.id}','${escHtml(u.display_name)}')">Del</button>
-            </div>
-          </div>`;
-        }).join('');
-      }
-
-      async function toggleSpondUser(id, active) {
-        try {
-          const res = await api(`/spond-accounts/${id}`, "PATCH", { is_active: active });
-          if (!res.ok) throw new Error((await res.json()).detail || "Failed");
-          showToast(
-            `Account ${active ? "activated" : "deactivated"}.`,
-            "success",
-          );
-          loadStats();
-        } catch (err) {
-          showToast(err.message, "error");
-        }
-      }
-
-      async function deleteSpondUser(id, name) {
-        if (
-          !confirm(`Delete Spond account for "${name}" and all their events?`)
-        )
-          return;
-        try {
-          const res = await api(`/spond-accounts/${id}`, "DELETE");
-          if (!res.ok && res.status !== 204)
-            throw new Error((await res.json()).detail || "Failed");
-          allSpondUsers = allSpondUsers.filter((u) => u.id !== id);
-          renderSpondUsersTable();
-          showToast(`Account for "${name}" deleted.`, "success");
-          loadStats();
-          loadAdminEvents();
-        } catch (err) {
-          showToast(err.message, "error");
-        }
-      }
-
-      async function deleteFrontendUser(id, username) {
-        if (!confirm(`Delete dashboard account "${username}"?`)) return;
-        try {
-          const res = await api(`/accounts/${id}`, "DELETE");
-          if (!res.ok && res.status !== 204)
-            throw new Error((await res.json()).detail || "Failed");
-          loadFrontendUsersTable();
-          showToast(`Account "${username}" deleted.`, "success");
-        } catch (err) {
-          showToast(err.message, "error");
-        }
-      }
-
-      // ── Edit Frontend User (role/link toggle) ──────────────────────────
-      function openEditFrontendUser(id, username, isAdmin, linkedId) {
-        editFrontendUserId = id;
-        document.getElementById("edit-fu-username-label").textContent =
-          `Editing: ${username}`;
-        document.getElementById("edit-fu-is-admin").checked = isAdmin;
-        document.getElementById("edit-fu-new-password").value = "";
-        document.getElementById("edit-fu-error").style.display = "none";
-
-        // Populate the Spond account dropdown
-        const sel = document.getElementById("edit-fu-linked-user");
-        sel.innerHTML =
-          '<option value="">None</option>' +
-          allSpondUsers
-            .map(
-              (u) =>
-                `<option value="${u.id}" ${u.id === linkedId ? "selected" : ""}>${escHtml(u.display_name)} (${escHtml(u.login)})</option>`,
-            )
-            .join("");
-
-        document
-          .getElementById("edit-frontend-user-modal")
-          .classList.remove("hidden");
-      }
-
-      async function saveEditFrontendUser() {
-        const errEl = document.getElementById("edit-fu-error");
-        const is_admin = document.getElementById("edit-fu-is-admin").checked;
-        const linked_user_id =
-          document.getElementById("edit-fu-linked-user").value || null;
-        const new_password = document.getElementById(
-          "edit-fu-new-password",
-        ).value;
-        errEl.style.display = "none";
-
-        if (new_password && new_password.length < 8) {
-          errEl.textContent = "Password must be at least 8 characters.";
-          errEl.style.display = "block";
-          return;
-        }
-
-        const body = { is_admin, linked_user_id };
-        if (new_password) body.new_password = new_password;
-
-        try {
-          const res = await api(
-            `/accounts/${editFrontendUserId}`,
-            "PATCH",
-            body,
-          );
-          if (!res.ok) throw new Error((await res.json()).detail || "Failed");
-          closeModal("edit-frontend-user-modal");
-          showToast("User updated.", "success");
-          loadFrontendUsersTable();
-        } catch (err) {
-          errEl.textContent = err.message;
-          errEl.style.display = "block";
-        }
-      }
-
-      // ── Create Frontend User ───────────────────────────────────────────
-      function showAddUserModal() {
-        document.getElementById("new-username").value = "";
-        document.getElementById("new-password").value = "";
-        document.getElementById("new-linked-user").value = "";
-        document.getElementById("new-is-admin").checked = false;
-        document.getElementById("add-user-error").style.display = "none";
-        document.getElementById("add-user-modal").classList.remove("hidden");
-      }
-
-      async function createFrontendUser() {
-        const errEl = document.getElementById("add-user-error");
-        const username = document.getElementById("new-username").value.trim();
-        const password = document.getElementById("new-password").value;
-        const linked = document.getElementById("new-linked-user").value || null;
-        const is_admin = document.getElementById("new-is-admin").checked;
-
-        errEl.style.display = "none";
-        if (!username || !password) {
-          errEl.textContent = "Username and password required.";
-          errEl.style.display = "block";
-          return;
-        }
-
-        try {
-          const res = await api("/accounts", "POST", {
-            username,
-            password,
-            linked_user_id: linked,
-            is_admin,
-          });
-          if (!res.ok) {
-            const e = await res.json();
-            throw new Error(e.detail || "Failed");
-          }
-          closeModal("add-user-modal");
-          showToast(`Account "${username}" created.`, "success");
-          loadFrontendUsersTable();
-        } catch (err) {
-          errEl.textContent = err.message;
-          errEl.style.display = "block";
-        }
-      }
-
-      // ── Create Spond Account ───────────────────────────────────────────
-      function showAddSpondModal() {
-        document.getElementById("spond-login").value = "";
-        document.getElementById("spond-password").value = "";
-        document.getElementById("spond-display-name").value = "";
-        document.getElementById("add-spond-error").style.display = "none";
-        document.getElementById("add-spond-modal").classList.remove("hidden");
-      }
-
-      async function addSpondAccount() {
-        const errEl = document.getElementById("add-spond-error");
-        const btn = document.getElementById("add-spond-btn");
-        const login = document.getElementById("spond-login").value.trim();
-        const password = document.getElementById("spond-password").value;
-        const display_name =
-          document.getElementById("spond-display-name").value.trim() ||
-          login.split("@")[0];
-
-        errEl.style.display = "none";
-        if (!login || !password) {
-          errEl.textContent = "Login and password required.";
-          errEl.style.display = "block";
-          return;
-        }
-
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span> Connecting...';
-
-        try {
-          const res = await api("/spond-accounts", "POST", {
-            login,
-            password,
-            display_name,
-          });
-          if (!res.ok) {
-            const e = await res.json();
-            throw new Error(e.detail || "Failed");
-          }
-          closeModal("add-spond-modal");
-          showToast("Spond account connected successfully!", "success");
-          await loadSpondUsers();
-          renderSpondUsersTable();
-          loadStats();
-        } catch (err) {
-          errEl.textContent = err.message;
-          errEl.style.display = "block";
-        } finally {
-          btn.disabled = false;
-          btn.textContent = "Connect";
-        }
-      }
-
-      // ── Sync ───────────────────────────────────────────────────────────
-      async function doSync() {
-        try {
-          const res = await api("/admin/sync", "POST");
-          if (!res.ok) throw new Error((await res.json()).detail || "Failed");
-          showToast("Discovery sync triggered.", "success");
-          setTimeout(() => {
-            loadAdminEvents();
-            loadStats();
-          }, 5000);
-        } catch (err) {
-          showToast(err.message, "error");
-        }
-      }
-
-      // ── RSVP Audit Log ─────────────────────────────────────────────────
-      async function loadRsvpLog() {
-        const wrap = document.getElementById('rsvp-log-wrap');
-        wrap.innerHTML = `<div class="flex-center" style="padding:2.5rem"><span class="spinner" style="width:22px;height:22px;border-width:3px;"></span></div>`;
-
-        const userId = document.getElementById('rl-user')?.value || '';
-        const outcome = document.getElementById('rl-outcome')?.value || '';
-
-        let url = '/admin/rsvp-log?limit=200';
-        if (userId) url += `&user_id=${userId}`;
-
-        try {
-          const res = await api(url);
-          if (!res.ok) throw new Error('Failed to fetch RSVP log');
-          let rows = await res.json();
-
-          if (outcome) rows = rows.filter(r => r.outcome === outcome);
-
-          renderRsvpLog(rows);
-        } catch (err) {
-          wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">Failed to load log</div><div class="empty-state-sub">${escHtml(err.message)}</div></div>`;
-        }
-      }
-
-      function renderRsvpLog(rows) {
-        const wrap = document.getElementById('rsvp-log-wrap');
-        if (!rows.length) {
-          wrap.innerHTML = `<div class="empty-state"><div class="empty-state-title">No RSVP log entries</div><div class="empty-state-sub">Entries appear here after the bot fires its first RSVP.</div></div>`;
-          return;
-        }
-
-        const outcomeBadge = (o) => {
-          if (o === 'success') return `<span class="badge badge-accept">success</span>`;
-          if (o === 'retry_success') return `<span class="badge badge-manual" style="background:rgba(255,180,0,0.15);color:#ffb400;border-color:rgba(255,180,0,0.3)">retry ok</span>`;
-          return `<span class="badge badge-decline">failed</span>`;
-        };
-
-        wrap.innerHTML = `
-          <div style="overflow-x:auto">
-            <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
-              <thead>
-                <tr style="border-bottom:1px solid var(--border);color:var(--text-muted)">
-                  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600">Fired At</th>
-                  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600">User</th>
-                  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600">Event ID</th>
-                  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600">Choice</th>
-                  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600">Outcome</th>
-                  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600">Retries</th>
-                  <th style="text-align:left;padding:0.5rem 0.75rem;font-weight:600">Error</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${rows.map(r => `
-                  <tr style="border-bottom:1px solid var(--surface-container-high)">
-                    <td style="padding:0.5rem 0.75rem;white-space:nowrap;color:var(--text-muted)">${fmtDate(r.fired_at)}</td>
-                    <td style="padding:0.5rem 0.75rem">${escHtml(getUserName(r.user_id))}</td>
-                    <td style="padding:0.5rem 0.75rem;font-family:monospace;font-size:0.75rem;color:var(--text-muted)">${escHtml(r.spond_event_id.slice(0, 12))}…</td>
-                    <td style="padding:0.5rem 0.75rem">${choiceBadge(r.choice)}</td>
-                    <td style="padding:0.5rem 0.75rem">${outcomeBadge(r.outcome)}</td>
-                    <td style="padding:0.5rem 0.75rem;text-align:center">${r.retry_count}</td>
-                    <td style="padding:0.5rem 0.75rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--status-red);font-size:0.75rem" title="${escHtml(r.error_detail || '')}">${escHtml(r.error_detail || '—')}</td>
-                  </tr>`).join('')}
-              </tbody>
-            </table>
-          </div>`;
-      }
-
-      // ── Charts ────────────────────────────────────────────────────────
-      let _latencyChart = null;
-      let _dailyChart = null;
-
-      async function loadCharts() {
-        // Populate user filter on first load
-        const userSel = document.getElementById('chart-user');
-        if (userSel.options.length === 1) {
-          try {
-            const spondUsers = await api('/spond-accounts');
-            const users = await spondUsers.json();
-            users.forEach(u => {
-              const opt = document.createElement('option');
-              opt.value = u.id;
-              opt.textContent = u.display_name;
-              userSel.appendChild(opt);
-            });
-          } catch {}
-        }
-
-        const days = document.getElementById('chart-days').value;
-        const userId = document.getElementById('chart-user').value;
-        let url = `/admin/charts?days=${days}`;
-        if (userId) url += `&user_id=${userId}`;
-
-        let data;
-        try {
-          const res = await api(url);
-          if (!res.ok) return;
-          data = await res.json();
-        } catch { return; }
-
-        // Latency scatter
-        const latencyCtx = document.getElementById('chart-latency').getContext('2d');
-        if (_latencyChart) _latencyChart.destroy();
-        _latencyChart = new Chart(latencyCtx, {
-          type: 'scatter',
-          data: {
-            datasets: [{
-              label: 'Latency (ms)',
-              data: data.latency_scatter.map(p => ({ x: new Date(p.fired_at).getTime(), y: p.latency_ms, user_name: p.user_name, heading: p.heading })),
-              backgroundColor: 'rgba(64,138,113,0.6)',
-              pointRadius: 4,
-            }]
-          },
-          options: {
-            responsive: true,
-            scales: {
-              x: { type: 'linear', ticks: { color: '#8abcab', callback: v => new Date(v).toLocaleDateString() }, grid: { color: '#285a48' } },
-              y: { ticks: { color: '#8abcab' }, grid: { color: '#285a48' } },
-            },
-            plugins: {
-              legend: { labels: { color: '#d9e5e3' } },
-              tooltip: {
-                callbacks: {
-                  label: ctx => {
-                    const date = new Date(ctx.parsed.x).toLocaleString();
-                    const name = ctx.raw.user_name || '';
-                    const heading = ctx.raw.heading ? ` · ${ctx.raw.heading}` : '';
-                    return `${name}${heading}: ${ctx.parsed.y} ms (${date})`;
-                  }
-                }
-              }
-            },
-          }
-        });
-
-        // Daily bar chart
-        const dailyCtx = document.getElementById('chart-daily').getContext('2d');
-        if (_dailyChart) _dailyChart.destroy();
-        _dailyChart = new Chart(dailyCtx, {
-          type: 'bar',
-          data: {
-            labels: data.daily_success_rate.map(d => d.date),
-            datasets: [
-              { label: 'Success', data: data.daily_success_rate.map(d => d.success), backgroundColor: 'rgba(74,222,128,0.7)' },
-              { label: 'Retry', data: data.daily_success_rate.map(d => d.retry_success), backgroundColor: 'rgba(251,146,60,0.7)' },
-              { label: 'Failed', data: data.daily_success_rate.map(d => d.failed), backgroundColor: 'rgba(248,113,113,0.7)' },
-            ]
-          },
-          options: {
-            responsive: true,
-            scales: {
-              x: { stacked: true, ticks: { color: '#8abcab' }, grid: { color: '#285a48' } },
-              y: { stacked: true, ticks: { color: '#8abcab' }, grid: { color: '#285a48' } },
-            },
-            plugins: { legend: { labels: { color: '#d9e5e3' } } },
-          }
-        });
-
-        // Per-user table
-        const tableEl = document.getElementById('chart-per-user-table');
-        if (!data.per_user.length) {
-          tableEl.innerHTML = '<p class="text-muted text-sm">No data.</p>';
-          return;
-        }
-        tableEl.innerHTML = `
-          <table class="data-table">
-            <thead><tr>
-              <th>User</th><th>Total RSVPs</th><th>Success</th><th>p50 (ms)</th><th>p95 (ms)</th>
-            </tr></thead>
-            <tbody>
-              ${data.per_user.map(u => `
-                <tr>
-                  <td>${escHtml(u.user_name)}</td>
-                  <td>${u.total}</td>
-                  <td>${u.success}</td>
-                  <td>${u.p50_ms ?? '—'}</td>
-                  <td>${u.p95_ms ?? '—'}</td>
-                </tr>`).join('')}
-            </tbody>
-          </table>`;
-      }
-
-      // ── Scheduler panel ───────────────────────────────────────────────
-      async function loadScheduler() {
-        const el = document.getElementById('scheduler-list');
-        let jobs;
-        try {
-          const res = await api('/admin/scheduler');
-          if (!res.ok) return;
-          jobs = await res.json();
-        } catch { return; }
-
-        if (!jobs.length) {
-          el.innerHTML = '<p class="text-muted text-sm" style="padding:1rem">No snipers currently armed.</p>';
-          return;
-        }
-        el.innerHTML = `
-          <table class="data-table">
-            <thead><tr>
-              <th>Event</th><th>User</th><th>Fire At</th><th>Countdown</th><th>Actions</th>
-            </tr></thead>
-            <tbody>
-              ${jobs.map(j => `
-                <tr>
-                  <td>${escHtml(j.heading ?? j.event_id)}</td>
-                  <td>${escHtml(j.user_name ?? '—')}</td>
-                  <td>${new Date(j.fire_at).toLocaleString()}</td>
-                  <td>${fmtCountdown(j.countdown_s)}</td>
-                  <td style="display:flex;gap:0.25rem">
-                    <button class="btn btn-ghost btn-sm" onclick="cancelJob('${escHtml(j.job_id)}')">Cancel</button>
-                    <button class="btn btn-outline btn-sm" onclick="fireJob('${escHtml(j.job_id)}')">Fire Now</button>
-                  </td>
-                </tr>`).join('')}
-            </tbody>
-          </table>`;
-      }
-
-      function fmtCountdown(s) {
-        if (s < 60) return `${s}s`;
-        if (s < 3600) return `${Math.floor(s/60)}m ${s%60}s`;
-        return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
-      }
-
-      async function cancelJob(jobId) {
-        if (!confirm('Cancel this sniper? The event choice remains set but no RSVP will be auto-submitted.')) return;
-        try {
-          const res = await api(`/admin/scheduler/${jobId}`, 'DELETE');
-          if (!res.ok) { showToast('Failed to cancel sniper.', 'error'); return; }
-          showToast('Sniper cancelled.', 'info');
-        } catch {}
-        loadScheduler();
-      }
-
-      async function fireJob(jobId) {
-        if (!confirm('Fire this sniper immediately? The RSVP will be submitted right now.')) return;
-        try {
-          const res = await api(`/admin/scheduler/${jobId}/fire`, 'POST');
-          if (!res.ok) { showToast('Failed to fire sniper.', 'error'); return; }
-          showToast('Sniper fired.', 'success');
-        } catch {}
-        loadScheduler();
-      }
-
-      // ── Utils ──────────────────────────────────────────────────────────
-      function closeModal(id) {
-        document.getElementById(id).classList.add("hidden");
-      }
-      function escHtml(str) {
-        return String(str)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;");
-      }
-
-      // Close modals on overlay click
-      document.querySelectorAll(".modal-overlay").forEach((el) => {
-        el.addEventListener("click", function (e) {
-          if (e.target === this) this.classList.add("hidden");
-        });
-      });
-
-      init();
-    </script>
+      </form>
+    </dialog>
+
+    <script src="core.js?v=1"></script>
+    <script src="app.js?v=8"></script>
+    <script src="admin.js?v=1"></script>
   </body>
 </html>
-
-
-
