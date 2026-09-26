@@ -818,6 +818,12 @@
         return u ? u.display_name : (userId?.slice(0, 8) + "…");
       }
 
+      function getSpondUserName(linkedUserId, spondUsers) {
+        if (!linkedUserId) return null;
+        const found = spondUsers.find(u => u.id === linkedUserId);
+        return found ? found.display_name : null;
+      }
+
       function renderAdminEventCards(events) {
         const wrap = document.getElementById("events-table-wrap");
         if (!events.length) {
@@ -922,17 +928,15 @@
           }
           wrap.innerHTML = users.map((u) => {
             const av = initials(u.username);
-            const linked = u.linked_user_id
-              ? allSpondUsers.find((s) => s.id === u.linked_user_id)?.display_name || u.linked_user_id.slice(0, 8) + '…'
-              : null;
+            const linkedName = getSpondUserName(u.linked_user_id, allSpondUsers);
             return `
             <div class="user-card">
               <div class="user-card-avatar">${av}</div>
               <div class="user-card-body">
                 <div class="user-card-name">${escHtml(u.username)}</div>
+                ${linkedName ? `<div class="text-muted" style="font-size:0.7rem;margin-top:2px">Managing: ${escHtml(linkedName)}</div>` : ''}
                 <div class="user-card-meta">
                   ${u.is_admin ? '<span class="badge badge-accept">Admin</span>' : '<span class="badge badge-manual">User</span>'}
-                  ${linked ? `<span class="user-card-detail">${ICON.user} ${escHtml(linked)}</span>` : ''}
                 </div>
               </div>
               <div class="user-card-actions">
