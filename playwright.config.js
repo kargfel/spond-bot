@@ -9,11 +9,12 @@ const launchOptions = process.env.PW_CHROMIUM_PATH
 module.exports = defineConfig({
   testDir: "tests/frontend/e2e",
   fullyParallel: true,
-  reporter: process.env.CI ? "github" : "list",
+  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL: "http://spondbot.test",
     timezoneId: "UTC",
     locale: "en-GB",
+    trace: "retain-on-failure",
     launchOptions,
   },
   projects: [

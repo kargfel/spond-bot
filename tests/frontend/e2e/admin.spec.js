@@ -201,7 +201,9 @@ test.describe("admin panel", () => {
 
   test("layout never scrolls sideways", async ({ page }) => {
     for (const view of ["", "#timeline", "#users", "#log", "#charts"]) {
+      // Same-page hash changes do not reload, so force a full load and let the view render.
       await page.goto("/admin" + view);
+      await page.reload();
       await page.waitForLoadState("networkidle");
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow, `view ${view || "#queue"}`).toBeLessThanOrEqual(0);

@@ -42,6 +42,8 @@
 - **2026-09-24**: SSE streams added (`/admin/stream`, `/user/stream`)
 - **2026-09-24**: Admin dashboard charts + scheduler panel added
 - **2026-09-24**: User dashboard improved (Spond account indicator, Change Password button)
+- **2026-09-26**: Frontend redesign (PR #22): member decision inbox + agenda, admin console with queue, timeline, users, log and charts; frontend unit and e2e tests
+- **2026-09-26**: CI (GitHub Actions), pinned dependency lock, Dependabot
 
 ---
 
@@ -141,9 +143,8 @@ The initial implementation tried to base64-decode the `accessToken.token` value,
 
 ### Known Limitations / Tech Debt
 
-- **No Alembic migrations:** schema changes require manual SQL or recreating the DB. As the schema evolves, proper migration tooling should be added.
-- **No test suite:** there are no automated tests. Core logic (token lifecycle, sniper scheduling, upsert behavior) would benefit from unit tests.
-- **Frontend is a monolith:** `app.js` is a single large file handling all three pages. As features grow, this will become hard to maintain.
+- **Migrations are hand-written:** Alembic runs on container start (`alembic upgrade head`), with migrations in `migrations/versions/`. New schema changes need a matching migration.
+- **Test coverage gaps:** API routes, the executioner and discovery tracking have pytest coverage, and the frontend has unit and e2e tests. The Spond client itself (`spond_client.py`) is only exercised through mocks; there is no contract test against Spond's real responses.
 - **Audit log is append-only:** the `rsvp_log` table records every submission attempt (outcome, timing, error detail). The `/admin/rsvp-log` endpoint accepts a `limit` param (default 100, max 500) and supports `user_id`/`since` filters.
 - **Fernet key rotation is destructive:** changing `FERNET_KEY` invalidates all stored credentials with no migration path.
 - **Single APScheduler instance:** the scheduler lives in the same process as the web server. Under high load, a slow RSVP batch could affect HTTP response times. For scale, consider a separate worker process.

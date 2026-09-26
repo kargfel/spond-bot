@@ -141,7 +141,7 @@ button { cursor: pointer; }
 @media (max-width: 520px) { .view-head .filters { flex-wrap: wrap; width: 100%; } .view-head .filters .field { flex: 1 1 140px; } }
 
 /* ── Tables ────────────────────────────────────────────────────────── */
-.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.table-wrap { position: relative; overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
 table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 caption { text-align: left; padding: 12px 14px 10px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
 th { text-align: left; font-weight: 500; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--panel); }

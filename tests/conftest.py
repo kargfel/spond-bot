@@ -1,13 +1,24 @@
-import pytest
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import (
+import os
+
+# Settings are read when `app` is first imported, so test-safe values must be in
+# place before that. Real env vars win over .env, which keeps tests away from a
+# developer's real database and credentials. The engine is created lazily
+# (no connection is made); every test swaps in SQLite via get_db overrides.
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost:5432/test")
+os.environ.setdefault("FERNET_KEY", "ZmDfcTF7_60GrrY167zsiPd67pEvs0aGOv2oasOM1Pg=")
+os.environ.setdefault("API_KEY", "test-api-key")
+os.environ.setdefault("ADMIN_PASSWORD", "test-admin-password")
+
+import pytest  # noqa: E402
+from httpx import AsyncClient, ASGITransport  # noqa: E402
+from sqlalchemy.ext.asyncio import (  # noqa: E402
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
 
-from app.database import Base, get_db
-from app.api import deps
+from app.database import Base, get_db  # noqa: E402
+from app.api import deps  # noqa: E402
 import app.models.rsvp_log  # noqa: F401 — ensures rsvp_log table is registered in Base.metadata
 import app.models.user  # noqa: F401
 import app.models.event  # noqa: F401

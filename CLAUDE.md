@@ -6,7 +6,7 @@ SpondBot is a self-hosted multi-user automation backend that submits Spond RSVP 
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | FastAPI (async), Python 3.12+ |
+| Backend | FastAPI (async), Python 3.11 (Docker base image) |
 | Database | PostgreSQL 16 via SQLAlchemy async + asyncpg |
 | Scheduler | APScheduler 3.x (AsyncIOScheduler) |
 | Credentials at rest | Fernet symmetric encryption |
@@ -67,6 +67,17 @@ frontend/                  Static pages, no build step (served by app/main.py)
   app.js                   Shared browser layer: API calls, auth guards, dialogs, toasts
   member.css / admin.css   Light member theme / dark admin theme
 ```
+
+## Tests and CI
+
+- `pytest` — backend tests (`tests/`); `tests/conftest.py` sets safe env defaults, so no `.env` is needed.
+- GitHub Actions (`.github/workflows/ci.yml`) runs backend tests, frontend tests and a Docker build on every PR.
+
+## Dependencies
+
+`requirements.in` lists direct dependencies; `requirements.txt` is the pinned lock that Docker and CI install.
+After editing `requirements.in`, regenerate: `uv pip compile requirements.in --python-version 3.11 -o requirements.txt`.
+CI fails if the lock is out of date. Dependabot (`.github/dependabot.yml`) proposes weekly updates.
 
 ## Frontend Tests
 
