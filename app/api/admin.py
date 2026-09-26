@@ -178,6 +178,7 @@ async def get_charts(
     days: int = Query(30, le=90, description="Days of history to include"),
     user_id: uuid.UUID | None = Query(None, description="Filter to a single Spond user"),
 ):
+    """Returns chart data for the last N days: latency scatter, daily outcomes, per-user breakdown."""
     since = datetime.now(timezone.utc) - timedelta(days=days)
     q = (
         select(RsvpLog, User.display_name, Event.invite_time, Event.heading)
@@ -209,7 +210,7 @@ async def get_charts(
 
         date_str = log.fired_at.strftime("%Y-%m-%d")
         outcome = log.outcome if log.outcome in ("success", "failed", "retry_success") else "failed"
-        daily[date_str][outcome] = daily[date_str].get(outcome, 0) + 1
+        daily[date_str][outcome] += 1
 
         user_stats[display_name]["total"] += 1
         if log.outcome in ("success", "retry_success"):
@@ -218,9 +219,9 @@ async def get_charts(
     daily_rates = [
         DailyRate(
             date=date,
-            success=counts.get("success", 0),
-            failed=counts.get("failed", 0),
-            retry_success=counts.get("retry_success", 0),
+            success=counts["success"],
+            failed=counts["failed"],
+            retry_success=counts["retry_success"],
         )
         for date, counts in sorted(daily.items())
     ]
