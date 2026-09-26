@@ -50,6 +50,9 @@
           <button class="sidebar-item" onclick="showProfileModal()">
             ${ICON.user} My Profile
           </button>
+          <button class="sidebar-item" onclick="showChangePasswordModal()">
+            🔑 Change Password
+          </button>
           <!-- Only shown for admin accounts -->
           <a class="sidebar-item hidden" id="admin-nav-link" href="/admin">
             ${ICON.shield} Admin Panel
@@ -62,7 +65,7 @@
               <div class="sidebar-username" id="user-display-name">
                 Loading…
               </div>
-              <div class="sidebar-role text-muted" style="font-size: 0.7rem">
+              <div class="sidebar-role text-muted" id="user-spond-label" style="font-size: 0.7rem">
                 Spond Member
               </div>
             </div>
@@ -276,6 +279,58 @@
       </div>
     </div>
 
+    <!-- Change Password Modal -->
+    <div class="modal-overlay hidden" id="change-password-modal">
+      <div class="modal">
+        <h2 class="modal-title">Change Password</h2>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem">
+          <div class="field">
+            <label>Current Password</label>
+            <input
+              id="cpw-current"
+              class="input"
+              type="password"
+              placeholder="••••••••"
+              autocomplete="current-password"
+            />
+          </div>
+          <div class="field">
+            <label
+              >New Password
+              <span style="font-weight: 400">(min. 8 chars)</span></label
+            >
+            <input
+              id="cpw-new"
+              class="input"
+              type="password"
+              placeholder="••••••••"
+              minlength="8"
+              autocomplete="new-password"
+            />
+          </div>
+          <div class="field">
+            <label>Confirm New Password</label>
+            <input
+              id="cpw-confirm"
+              class="input"
+              type="password"
+              placeholder="••••••••"
+              autocomplete="new-password"
+            />
+          </div>
+        </div>
+        <div id="cpw-error" class="auth-error" style="margin-top: 0.5rem"></div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="closeChangePasswordModal()">
+            Cancel
+          </button>
+          <button class="btn btn-primary" onclick="submitChangePassword()">
+            Update Password
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div id="toast-container"></div>
 
     <script src="app.js?v=5"></script>
@@ -329,8 +384,8 @@
         if (payload.is_admin) {
           document.getElementById("admin-nav-link").classList.remove("hidden");
           document.getElementById("mnav-admin").classList.remove("hidden");
-          document.querySelector(".sidebar-role").textContent = "Administrator";
-          document.querySelector(".sidebar-role").style.color = "var(--mint)";
+          document.getElementById("user-spond-label").textContent = "Administrator";
+          document.getElementById("user-spond-label").style.color = "var(--mint)";
         }
 
         if (payload.linked_user_id) {
@@ -348,6 +403,18 @@
               );
             }
           } catch {}
+        }
+
+        const spondLabelEl = document.getElementById("user-spond-label");
+        if (spondLabelEl) {
+          if (payload.linked_user_id && spond_user) {
+            spondLabelEl.textContent = payload.is_admin
+              ? `Admin · Managing: ${spond_user.display_name}`
+              : `Managing: ${spond_user.display_name}`;
+          } else if (!payload.linked_user_id && !payload.is_admin) {
+            spondLabelEl.textContent = "No Spond account linked";
+          }
+          // Admins without linked account keep "Administrator" from earlier
         }
 
         await loadEvents();
@@ -696,11 +763,65 @@
           .replace(/"/g, "&quot;");
       }
 
+      // ── Change Password Modal ──────────────────────────────────────────
+      function showChangePasswordModal() {
+        document.getElementById("cpw-current").value = "";
+        document.getElementById("cpw-new").value = "";
+        document.getElementById("cpw-confirm").value = "";
+        document.getElementById("cpw-error").style.display = "none";
+        document.getElementById("change-password-modal").classList.remove("hidden");
+      }
+
+      function closeChangePasswordModal() {
+        document.getElementById("change-password-modal").classList.add("hidden");
+      }
+
+      async function submitChangePassword() {
+        const errEl = document.getElementById("cpw-error");
+        const current = document.getElementById("cpw-current").value;
+        const newPw = document.getElementById("cpw-new").value;
+        const confirm = document.getElementById("cpw-confirm").value;
+        errEl.style.display = "none";
+        if (!current || !newPw) {
+          errEl.textContent = "Fill in current and new password.";
+          errEl.style.display = "block";
+          return;
+        }
+        if (newPw.length < 8) {
+          errEl.textContent = "New password must be at least 8 characters.";
+          errEl.style.display = "block";
+          return;
+        }
+        if (newPw !== confirm) {
+          errEl.textContent = "Passwords do not match.";
+          errEl.style.display = "block";
+          return;
+        }
+        try {
+          const res = await api("/auth/me/password", "PATCH", {
+            current_password: current,
+            new_password: newPw,
+          });
+          if (!res.ok) throw new Error((await res.json()).detail || "Failed");
+          closeChangePasswordModal();
+          showToast("Password updated successfully.", "success");
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.style.display = "block";
+        }
+      }
+
       // Close modal on overlay click
       document
         .getElementById("profile-modal")
         .addEventListener("click", function (e) {
           if (e.target === this) closeProfileModal();
+        });
+
+      document
+        .getElementById("change-password-modal")
+        .addEventListener("click", function (e) {
+          if (e.target === this) closeChangePasswordModal();
         });
 
       init();
