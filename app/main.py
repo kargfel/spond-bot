@@ -25,6 +25,7 @@ from app.api import accounts as accounts_router
 from app.api.deps import AdminDep
 from app.api import admin as admin_router
 from app.api import auth as auth_router
+from app.api import stream as stream_router
 from app.api import events as events_router
 from app.api import users as users_router
 from app.config import settings
@@ -115,6 +116,7 @@ app.include_router(auth_router.router, prefix="/api/v1")
 app.include_router(users_router.router, prefix="/api/v1")
 app.include_router(events_router.router, prefix="/api/v1")
 app.include_router(admin_router.router, prefix="/api/v1")
+app.include_router(stream_router.router, prefix="/api/v1")
 
 # ── Frontend Serving ────────────────────────────────────────────────
 
