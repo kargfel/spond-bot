@@ -31,7 +31,7 @@ Originally a simple cron-script, SpondBot is now a fully-fledged platform featur
 
 ## ✨ Key Features
 
-![SpondBot Trailer](docs/brag.mp4)
+![SpondBot Trailer](docs/brag-compressed.mp4)
 
 - **Phone & Email Authentication**: Automatically detects whether an account uses an email or phone number.
 - **Zero-Trust Hardened**: All stored credentials are encrypted with a Fernet symmetric key.
