@@ -31,7 +31,7 @@ Originally a simple cron-script, SpondBot is now a fully-fledged platform featur
 
 ## ✨ Key Features
 
-<video src="https://github.com/user-attachments/assets/a123bee0-0da6-47cd-9068-1536596576e4" width="100%" autoplay loop muted playsinline></video>
+<img width="1280" height="720" alt="Image" src="https://github.com/user-attachments/assets/30f91dd3-0369-47cd-a81b-a97404c4f96c" />
 
 - **Phone & Email Authentication**: Automatically detects whether an account uses an email or phone number.
 - **Zero-Trust Hardened**: All stored credentials are encrypted with a Fernet symmetric key.
