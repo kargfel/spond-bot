@@ -19,6 +19,8 @@
 
 Tired of missing out on high-demand group events because they fill up in seconds? **SpondBot** connects to your Spond account and sends your answer (Going or Not going) the moment registration opens, to the millisecond. You pick the answer in advance; the bot handles the timing.
 
+![SpondBot Cover Image](docs/brag.jpg)
+
 Originally a simple cron-script, SpondBot is now a fully-fledged platform featuring:
 - **👮 Multi-User Support**: Host your own instance and let multiple users configure their own RSVP settings.
 - **🎨 Web Dashboard**: Members answer undecided events from an inbox and see every event by day, on phone or desktop. Admins get a live console with the answer queue, a per-account timeline, an audit log and timing charts.
@@ -28,6 +30,8 @@ Originally a simple cron-script, SpondBot is now a fully-fledged platform featur
 ---
 
 ## ✨ Key Features
+
+![SpondBot Trailer](docs/brag.mp4)
 
 - **Phone & Email Authentication**: Automatically detects whether an account uses an email or phone number.
 - **Zero-Trust Hardened**: All stored credentials are encrypted with a Fernet symmetric key.
