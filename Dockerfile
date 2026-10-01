@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # No cron needed — APScheduler handles scheduling inside the app process.
 RUN apt-get update \
