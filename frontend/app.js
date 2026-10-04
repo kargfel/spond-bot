@@ -6,6 +6,8 @@
  *  - toast()             short status messages (role=status, or role=alert for errors)
  *  - openDialog()        native <dialog> helpers; confirmAction() replaces window.confirm()
  *  - bindMenu()          accessible popup menu behind a button
+ *  - registerServiceWorker()  offline page, asset cache, push; offers updates in a banner
+ *  - Pwa                 install helpers (standalone detection, install prompt)
  *
  * Pure formatting and event logic lives in core.js (global `Core`).
  */
@@ -72,6 +74,8 @@ async function requireAdmin() {
 }
 
 async function signOut() {
+  // Stop notifications on this device before the session ends, so the next login on it starts clean.
+  if (window.SpondPush) await window.SpondPush.disable().catch(() => {});
   await api("/auth/logout", "POST").catch(() => {});
   window.location.href = "/";
 }
@@ -190,6 +194,95 @@ function connectStream(path, handlers, indicator) {
   }
   return es;
 }
+
+/* ── Service worker ────────────────────────────────────────────────── */
+function showUpdateBanner(worker) {
+  if (document.getElementById("update-banner")) return;
+  const bar = document.createElement("div");
+  bar.id = "update-banner";
+  bar.className = "update-banner";
+  bar.setAttribute("role", "status");
+  const text = document.createElement("span");
+  text.textContent = "A new version of SpondBot is ready.";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = "Reload";
+  btn.addEventListener("click", () => {
+    btn.disabled = true;
+    navigator.serviceWorker.addEventListener("controllerchange", () => window.location.reload(), { once: true });
+    worker.postMessage({ type: "SKIP_WAITING" });
+  });
+  bar.append(text, btn);
+  document.body.appendChild(bar);
+}
+
+/**
+ * Registers /sw.js. A new worker waits in the background; once installed the page offers a
+ * reload instead of swapping scripts under the member's feet. Does nothing without HTTPS.
+ */
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  const register = () => {
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((reg) => {
+      // First install has no controller yet: that is not an update.
+      const offer = () => {
+        if (reg.waiting && navigator.serviceWorker.controller) showUpdateBanner(reg.waiting);
+      };
+      offer();
+      reg.addEventListener("updatefound", () => {
+        const worker = reg.installing;
+        if (worker) worker.addEventListener("statechange", () => { if (worker.state === "installed") offer(); });
+      });
+      // Installed apps stay open for days: look for a new version whenever the app comes back.
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") reg.update().catch(() => {});
+      });
+    }).catch(() => { /* no service worker: the site keeps working online */ });
+  };
+  if (document.readyState === "complete") register();
+  else window.addEventListener("load", register, { once: true });
+}
+
+/* ── Install ───────────────────────────────────────────────────────── */
+const Pwa = (() => {
+  let deferred = null;
+  const listeners = [];
+  const notify = () => listeners.forEach((fn) => fn());
+
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferred = e;
+    notify();
+  });
+  window.addEventListener("appinstalled", () => {
+    deferred = null;
+    notify();
+  });
+
+  const standalone = () =>
+    window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  const ios = () =>
+    /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+  return {
+    standalone,
+    ios,
+    mode: () => Core.installMode({ standalone: standalone(), ios: ios(), hasPrompt: Boolean(deferred) }),
+    /** Runs the browser's install prompt (Chromium). Resolves to "accepted" or "dismissed". */
+    async prompt() {
+      if (!deferred) return "dismissed";
+      deferred.prompt();
+      const { outcome } = await deferred.userChoice;
+      deferred = null;
+      notify();
+      return outcome;
+    },
+    onChange: (fn) => listeners.push(fn),
+  };
+})();
+
+registerServiceWorker();
 
 /* ── Misc ──────────────────────────────────────────────────────────── */
 function initials(name) {

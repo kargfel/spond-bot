@@ -316,3 +316,21 @@ dialog::backdrop { background: rgba(10, 16, 14, 0.45); }
 .connect { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px; max-width: 520px; display: grid; gap: 14px; }
 .connect h2 { font-size: 19px; font-weight: 700; }
 .connect .btn { justify-self: start; }
+
+/* ── Update banner & install/notification dialogs ──────────────────── */
+.update-banner {
+  position: fixed; z-index: 55; left: 16px; right: 16px; margin-inline: auto; max-width: 480px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 10px 10px 16px; border-radius: 12px; font-size: 14px; font-weight: 500;
+  background: var(--ink); color: var(--bg); box-shadow: var(--shadow);
+}
+.update-banner button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: var(--bg); color: var(--ink); font-weight: 700; }
+.update-banner button:disabled { opacity: 0.6; }
+.dialog-note { color: var(--muted); }
+.dialog-note b { color: var(--ink); font-weight: 600; }
+.push-status { padding: 12px 14px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); }
+.push-status[data-kind="on"] { background: var(--go-soft); border-color: transparent; }
+.push-status[data-kind="blocked"], .push-status[data-kind="needs-install"] { background: var(--bad-soft); border-color: var(--bad-line); }
+.steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.dialog-actions-wrap { flex-wrap: wrap; }

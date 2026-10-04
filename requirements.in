@@ -28,6 +28,9 @@ pydantic-settings>=2.6.0
 # HTTP client (Spond API)
 aiohttp>=3.13.4
 
+# Web Push notifications (VAPID + payload encryption)
+pywebpush>=2.0.0
+
 # Utilities
 python-dotenv>=1.2.2
 

@@ -15,6 +15,9 @@ module.exports = defineConfig({
     timezoneId: "UTC",
     locale: "en-GB",
     trace: "retain-on-failure",
+    // The mocked-API specs intercept requests per page, which a service worker would bypass.
+    // pwa.spec.js turns workers back on and runs against a real local server instead.
+    serviceWorkers: "block",
     launchOptions,
   },
   projects: [

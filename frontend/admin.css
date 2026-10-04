@@ -271,3 +271,8 @@ dialog::backdrop { background: rgba(5, 7, 9, 0.6); }
 .toasts { position: fixed; z-index: 60; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 16px; display: grid; justify-items: end; gap: 8px; pointer-events: none; }
 .toast { max-width: 440px; padding: 9px 14px; border-radius: 4px; font-size: 13.5px; background: var(--hi); color: var(--bg); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
 .toast-error { background: var(--bad); color: #1c0c0a; }
+
+/* ── Update banner ─────────────────────────────────────────────────── */
+.update-banner { position: fixed; z-index: 65; left: 16px; right: 16px; margin-inline: auto; max-width: 440px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 8px 8px 14px; border-radius: 4px; font-size: 13.5px; background: var(--hi); color: var(--bg); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
+.update-banner button { min-height: 32px; padding: 0 12px; border: 0; border-radius: 3px; background: var(--sig); color: var(--sig-ink); font: inherit; font-weight: 600; cursor: pointer; }
+.update-banner button:disabled { opacity: 0.6; }

@@ -56,6 +56,8 @@ TZ=Europe/Berlin
 | `EXECUTIONER_INTERVAL_SECONDS` | `60` | How often the fallback executioner looks for due answers |
 | `RSVP_LEAD_TIME_MS` | `0` | Fire this many milliseconds *before* registration opens, to offset network latency. Spond may reject answers that arrive before opening, so raise it carefully and watch the answer log |
 | `TZ` | `Europe/Berlin` | Scheduler and log timezone |
+| `VAPID_PRIVATE_KEY` | empty (push off) | Signs Web Push notifications. Generate with `python scripts/generate_vapid_key.py`. Keep it: a new key invalidates every device's notification subscription |
+| `VAPID_SUBJECT` | `https://<SITE_DOMAIN>` | Contact URL (`https:` or `mailto:`) that push services can use to reach you |
 | `BACKUP_DIR` | `./backups` | Host folder for database dumps (compose `backup` service) |
 | `BACKUP_INTERVAL_HOURS` | `24` | Time between backups |
 | `BACKUP_KEEP_DAYS` | `14` | Dumps older than this are deleted after a successful backup |
@@ -112,6 +114,30 @@ The database port is intentionally not exposed outside the Docker network. Conne
 ```bash
 docker exec -it spond-db psql -U spond -d spond_bot
 ```
+
+---
+
+## Installable app and notifications (PWA)
+
+SpondBot is an installable web app: members can add it to their home screen (Chrome/Edge: *Install app* in the account menu or the browser's install button; iPhone/iPad: Share → Add to Home Screen, the menu shows the steps). When the server cannot be reached it shows an offline page instead of a browser error.
+
+Installing and the service worker need **HTTPS** (or `localhost`). The reverse proxy must pass `/sw.js`, `/sw-core.js` and `/manifest.webmanifest` through unchanged and must not cache them: the app sends `Cache-Control: no-cache` for these so updates reach members. Members see a "new version" banner after a deploy.
+
+### Push notifications (optional)
+
+Members can get a notification when SpondBot sends an answer for them, or fails to.
+
+1. Generate a key once and add the printed line to `.env`:
+   ```bash
+   docker compose run --rm app python scripts/generate_vapid_key.py
+   ```
+2. Restart the app. The account menu now shows **Notifications**; each member turns them on per device and can send themselves a test.
+
+Notes:
+- **iPhone/iPad** only deliver web push to apps added to the Home Screen (iOS 16.4+).
+- Supported push services: Chrome and other Chromium browsers (FCM), Firefox, Safari. The server only sends to those hosts.
+- Signing out on a device turns its notifications off.
+- Only logins linked to a Spond account get answer notifications.
 
 ---
 

@@ -26,6 +26,7 @@ from app.api import auth as auth_router
 from app.api import stream as stream_router
 from app.api import events as events_router
 from app.api import invites as invites_router
+from app.api import push as push_router
 from app.api import users as users_router
 from app.config import settings
 from app.core.security import hash_password
@@ -117,6 +118,7 @@ app.include_router(events_router.router, prefix="/api/v1")
 app.include_router(admin_router.router, prefix="/api/v1")
 app.include_router(stream_router.router, prefix="/api/v1")
 app.include_router(invites_router.router, prefix="/api/v1")
+app.include_router(push_router.router, prefix="/api/v1")
 
 # ── Frontend Serving ────────────────────────────────────────────────
 
@@ -146,6 +148,29 @@ async def serve_join():
     return FileResponse(_FRONTEND_DIR / "join.html")
 
 
+# PWA files that browsers must revalidate on every use: a stale service worker or manifest
+# would pin members to an old version. The worker also has to sit at the root so its scope
+# covers the whole app.
+_REVALIDATE = {"Cache-Control": "no-cache"}
+
+
+@app.get("/sw.js", include_in_schema=False)
+async def serve_service_worker():
+    return FileResponse(_FRONTEND_DIR / "sw.js", media_type="text/javascript", headers=_REVALIDATE)
+
+
+@app.get("/sw-core.js", include_in_schema=False)
+async def serve_service_worker_core():
+    return FileResponse(_FRONTEND_DIR / "sw-core.js", media_type="text/javascript", headers=_REVALIDATE)
+
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+async def serve_manifest():
+    return FileResponse(
+        _FRONTEND_DIR / "manifest.webmanifest", media_type="application/manifest+json", headers=_REVALIDATE
+    )
+
+
 @app.get("/docs", include_in_schema=False)
 async def protected_docs(current_user: dict = AdminDep):
     return get_swagger_ui_html(openapi_url="/openapi.json", title="SpondBot API")
@@ -159,7 +184,7 @@ async def protected_redoc(current_user: dict = AdminDep):
 # Web assets the catch-all may serve, collected once at startup. A request path
 # is only ever used as a key into this map, never to build a filesystem path,
 # so nothing outside it (source, README, dotfiles) can be reached.
-_ASSET_SUFFIXES = {".html", ".css", ".js", ".svg", ".png", ".ico", ".webmanifest"}
+_ASSET_SUFFIXES = {".html", ".css", ".js", ".svg", ".png", ".ico", ".woff2", ".webmanifest"}
 _ASSETS: dict[str, Path] = (
     {
         p.relative_to(_FRONTEND_DIR).as_posix(): p

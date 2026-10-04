@@ -206,6 +206,49 @@
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /* ── App install & notifications ───────────────────────────────── */
+
+  /** What the member can do to install the app: "installed" | "prompt" | "ios-steps" | "none". */
+  function installMode({ standalone, ios, hasPrompt }) {
+    if (standalone) return "installed";
+    if (hasPrompt) return "prompt";
+    if (ios) return "ios-steps";
+    return "none";
+  }
+
+  /**
+   * State of the notification setting for this device, with the text to show.
+   * kind: unavailable | needs-install | unsupported | blocked | on | off
+   */
+  function pushState({ serverEnabled, supported, ios, standalone, permission, subscribed }) {
+    const state = (kind, message, extra = {}) => ({ kind, message, canEnable: false, canDisable: false, canTest: false, ...extra });
+    if (!serverEnabled) return state("unavailable", "Notifications are not set up on this SpondBot server.");
+    if (!supported && ios && !standalone) {
+      return state("needs-install",
+        "On iPhone and iPad, add SpondBot to your Home Screen first: tap Share, then Add to Home Screen. Open it from there to turn notifications on.");
+    }
+    if (!supported) return state("unsupported", "This browser can't show notifications from SpondBot.");
+    if (permission === "denied") {
+      return state("blocked",
+        "Notifications are blocked for SpondBot. Allow them in your browser or system settings, then come back here.");
+    }
+    if (subscribed && permission === "granted") {
+      return state("on",
+        "Notifications are on for this device. You get one when SpondBot sends an answer for you, or fails to.",
+        { canDisable: true, canTest: true });
+    }
+    return state("off",
+      "Get a notification on this device whenever SpondBot answers an event for you, or fails to.",
+      { canEnable: true });
+  }
+
+  /** The server's VAPID public key (base64url) as the bytes PushManager.subscribe() wants. */
+  function urlBase64ToBytes(base64url) {
+    const padded = base64url + "=".repeat((4 - (base64url.length % 4)) % 4);
+    const binary = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  }
+
   return {
     CHOICE_LABELS,
     STATE_LABELS,
@@ -227,5 +270,8 @@
     timelineScale,
     buildQueue,
     groupByUser,
+    installMode,
+    pushState,
+    urlBase64ToBytes,
   };
 });

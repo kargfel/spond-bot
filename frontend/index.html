@@ -5,10 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Sign in · SpondBot</title>
     <meta name="description" content="Sign in to SpondBot, which answers your Spond invites the second registration opens." />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Public+Sans:wght@400;500;600;700&display=swap" />
-    <link rel="stylesheet" href="member.css?v=2" />
+    <link rel="stylesheet" href="/fonts/fonts.css?v=1" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#171e1b" media="(prefers-color-scheme: dark)" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="SpondBot" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="stylesheet" href="member.css?v=3" />
   </head>
   <body>
     <div class="signin">
@@ -45,8 +52,8 @@
       </main>
     </div>
 
-    <script src="core.js?v=1"></script>
-    <script src="app.js?v=8"></script>
+    <script src="core.js?v=2"></script>
+    <script src="app.js?v=9"></script>
     <script>
       (async function redirectIfSignedIn() {
         const user = await fetchCurrentUser();

@@ -52,9 +52,11 @@ app/
     event.py               One event-per-user row (choice + status)
     rsvp_log.py            Audit log of every RSVP attempt
     invite.py              Single-use invite link (token stored as SHA-256 hash)
+    push_subscription.py   One browser/device that gets Web Push (belongs to a dashboard login)
   services/
     auth.py                ensure_fresh_token() — token lifecycle
     spond_accounts.py      Verify Spond credentials + build encrypted User row
+    push.py                Web Push: VAPID key, payloads, sending, expired-subscription cleanup
   workers/
     discovery.py           Worker A: sync events from Spond for all users
     executioner.py         Worker B: fire RSVPs + sniper DateTrigger helpers
@@ -64,6 +66,7 @@ app/
     accounts.py            /accounts/* (dashboard logins, admin only)
     users.py               /spond-accounts/* (Spond account CRUD; POST /me = connect own account; PUT /{id}/password)
     invites.py             /invites/* (admin create/list/revoke; public check/accept)
+    push.py                /push/* (config, subscribe, unsubscribe, test) for the signed-in login
     events.py              /events/* (list, set decision) and /health
     admin.py               /admin/* (stats, charts, RSVP log, scheduler jobs, sync)
     stream.py              /admin/stream and /user/stream (SSE)
@@ -72,14 +75,22 @@ app/
 scripts/
   healthcheck.py           Docker HEALTHCHECK probe (exit 0 only on HTTP 200)
   backup.sh                pg_dump loop/once/check for the compose `backup` service
+  generate_vapid_key.py    Prints VAPID_PRIVATE_KEY for Web Push
+  build_icons.sh           Regenerates frontend/icons/ from docs/branding/ (ImageMagick)
+  fetch_fonts.py           Downloads the latin font subsets into frontend/fonts/
 frontend/                  Static pages, no build step (served by app/main.py)
   index.html               Sign-in page
   join.html/.js            Invite signup: create login + connect Spond account
   dashboard.html/.js       Member dashboard: decision inbox + day-grouped agenda
   admin.html/.js           Admin console: queue, timeline, users, log, charts
-  core.js                  Pure view logic (event state, grouping, formatting); unit tested
-  app.js                   Shared browser layer: API calls, auth guards, dialogs, toasts
+  core.js                  Pure view logic (event state, grouping, formatting, push state); unit tested
+  app.js                   Shared browser layer: API calls, auth guards, dialogs, toasts, service worker registration, install helper
+  push.js                  Web Push on this device (dashboard)
   member.css / admin.css   Light member theme / dark admin theme
+  manifest.webmanifest     PWA manifest
+  sw.js / sw-core.js       Service worker (offline page, asset cache, push) / its pure logic; unit tested
+  offline.html             Self-contained "no connection" page, shown by the service worker
+  icons/, fonts/           Generated: scripts/build_icons.sh, scripts/fetch_fonts.py
 ```
 
 ## Tests and CI
@@ -104,6 +115,14 @@ Frontend changes are test-driven. `npm install` once, then:
 
 Member-facing labels: `accept`/`decline`/`manual` are shown as Going / Not going / Leave to me.
 
+## PWA and Web Push
+
+- The app is installable (`manifest.webmanifest`, `sw.js` at the root). Page loads go network-first with `offline.html` as fallback; static files are stale-while-revalidate (**bump `?v=` on changed assets**); `/api/` is never cached. A new service worker waits until the member clicks Reload in the banner.
+- `/sw.js`, `/sw-core.js` and the manifest have explicit routes in `app/main.py` with `Cache-Control: no-cache`; the catch-all asset whitelist includes `.woff2`.
+- Fonts are self-hosted (`frontend/fonts/`); there are no requests to Google.
+- Web Push is optional: it needs `VAPID_PRIVATE_KEY` (`scripts/generate_vapid_key.py`); the public key is derived from it. The executioner's `_notify_member()` sends the SSE event and the push. Subscription endpoints are restricted to real push services (SSRF guard). Push must never block or fail an RSVP.
+- E2E: service worker specs (`pwa.spec.js`) run against a real local server; all other specs block service workers. Push UI specs use `installFakePush`.
+
 ## Event Lifecycle
 
 ```
@@ -125,7 +144,7 @@ At invite_time:
 
 ## Configuration (env vars)
 
-See `docs/setup.md` for the full reference. Critical vars: `DATABASE_URL`, `FERNET_KEY`, `API_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `RSVP_LEAD_TIME_MS`.
+See `docs/setup.md` for the full reference. Critical vars: `DATABASE_URL`, `FERNET_KEY`, `API_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `RSVP_LEAD_TIME_MS`. Optional: `VAPID_PRIVATE_KEY` (Web Push).
 
 ## Further Reading
 

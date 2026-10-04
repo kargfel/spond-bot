@@ -5,10 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>My events · SpondBot</title>
     <meta name="description" content="Choose how SpondBot answers your upcoming Spond events." />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Public+Sans:wght@400;500;600;700&display=swap" />
-    <link rel="stylesheet" href="member.css?v=2" />
+    <link rel="stylesheet" href="/fonts/fonts.css?v=1" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#171e1b" media="(prefers-color-scheme: dark)" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="SpondBot" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="stylesheet" href="member.css?v=3" />
   </head>
   <body>
     <header class="topbar">
@@ -21,6 +28,8 @@
           <button role="menuitem" type="button" id="menu-profile">Profile</button>
           <button role="menuitem" type="button" id="menu-password">Change password</button>
           <button role="menuitem" type="button" id="menu-spond-password" hidden>Update Spond password</button>
+          <button role="menuitem" type="button" id="menu-notifications" hidden>Notifications</button>
+          <button role="menuitem" type="button" id="menu-install" hidden>Install app</button>
           <a role="menuitem" href="/admin" id="menu-admin" hidden>Admin panel</a>
           <button role="menuitem" type="button" id="menu-signout">Sign out</button>
         </div>
@@ -137,8 +146,38 @@
       </form>
     </dialog>
 
-    <script src="core.js?v=1"></script>
-    <script src="app.js?v=8"></script>
-    <script src="dashboard.js?v=3"></script>
+    <dialog id="notifications-dialog" aria-labelledby="notifications-title">
+      <div class="dialog-body">
+        <h2 id="notifications-title">Notifications</h2>
+        <p class="form-error" role="alert" data-error hidden></p>
+        <p class="push-status" id="push-status" data-kind="off" role="status">Checking this device…</p>
+        <div class="dialog-actions dialog-actions-wrap">
+          <button type="button" class="btn btn-quiet" data-close>Close</button>
+          <button type="button" class="btn" id="push-test" hidden>Send test</button>
+          <button type="button" class="btn" id="push-disable" hidden>Turn off</button>
+          <button type="button" class="btn btn-primary" id="push-enable" hidden>Turn on</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="install-dialog" aria-labelledby="install-title">
+      <div class="dialog-body">
+        <h2 id="install-title">Add SpondBot to your Home Screen</h2>
+        <ol class="steps">
+          <li>Tap the <b>Share</b> button in Safari.</li>
+          <li>Choose <b>Add to Home Screen</b>.</li>
+          <li>Open SpondBot from the new icon.</li>
+        </ol>
+        <p class="dialog-note">Installed, SpondBot opens like an app, and you can turn on notifications.</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-primary" data-close>Got it</button>
+        </div>
+      </div>
+    </dialog>
+
+    <script src="core.js?v=2"></script>
+    <script src="app.js?v=9"></script>
+    <script src="push.js?v=1"></script>
+    <script src="dashboard.js?v=4"></script>
   </body>
 </html>
