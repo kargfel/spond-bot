@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     # Timezone (used by APScheduler)
     tz: str = "Europe/Berlin"
 
+    # Web Push (optional). Generate with: python scripts/generate_vapid_key.py
+    # Without a key the notification option is hidden everywhere.
+    vapid_private_key: str = ""
+    # Contact for push services (mailto: or https: URL). Defaults to https://<SITE_DOMAIN>.
+    vapid_subject: str = ""
+
     # Admin dashboard account — seeded once on startup if no admin exists
     admin_username: str = "admin"
     admin_password: str = "changeme"

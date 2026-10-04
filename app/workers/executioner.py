@@ -41,6 +41,7 @@ from app.models.event import (
 )
 from app.models.rsvp_log import OUTCOME_FAILED, OUTCOME_RETRY_SUCCESS, OUTCOME_SUCCESS, RsvpLog
 from app.models.user import User
+from app.services import push
 from app.services.auth import ensure_fresh_token
 
 logger = logging.getLogger(__name__)
@@ -139,11 +140,7 @@ async def _process_event(event: Event) -> None:
                 "outcome": "failed",
                 "latency_ms": None,
             })
-            await bus.publish_user(str(db_event.user_id), "rsvp_fired", {
-                "heading": db_event.heading,
-                "choice": db_event.user_choice,
-                "outcome": "failed",
-            })
+            await _notify_member(db_event, "failed")
             return
 
         accepted = db_event.user_choice == CHOICE_ACCEPT
@@ -238,11 +235,7 @@ async def _process_event(event: Event) -> None:
                 "outcome": "success",
                 "latency_ms": None,
             })
-            await bus.publish_user(str(db_event.user_id), "rsvp_fired", {
-                "heading": db_event.heading,
-                "choice": db_event.user_choice,
-                "outcome": "success",
-            })
+            await _notify_member(db_event, "success")
         elif db_event.status == STATUS_FAILED:
             await bus.publish_admin("rsvp_fired", {
                 "event_id": str(db_event.id),
@@ -252,11 +245,19 @@ async def _process_event(event: Event) -> None:
                 "outcome": "failed",
                 "latency_ms": None,
             })
-            await bus.publish_user(str(db_event.user_id), "rsvp_fired", {
-                "heading": db_event.heading,
-                "choice": db_event.user_choice,
-                "outcome": "failed",
-            })
+            await _notify_member(db_event, "failed")
+
+
+async def _notify_member(db_event: Event, outcome: str) -> None:
+    """Tell the member their answer went out (or failed): live stream first, then Web Push."""
+    await bus.publish_user(str(db_event.user_id), "rsvp_fired", {
+        "heading": db_event.heading,
+        "choice": db_event.user_choice,
+        "outcome": outcome,
+    })
+    push.dispatch_rsvp_notification(
+        db_event.user_id, db_event.id, db_event.heading, db_event.user_choice, outcome
+    )
 
 
 async def _submit_rsvp(

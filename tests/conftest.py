@@ -23,6 +23,7 @@ import app.models.rsvp_log  # noqa: F401 — ensures rsvp_log table is registere
 import app.models.user  # noqa: F401
 import app.models.event  # noqa: F401
 import app.models.invite  # noqa: F401
+import app.models.push_subscription  # noqa: F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
