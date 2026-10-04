@@ -257,3 +257,88 @@ describe("groupByUser (admin timeline)", () => {
     assert.deepEqual(lanes[1].events, []);
   });
 });
+
+describe("installMode", () => {
+  test("an installed app has nothing to install", () => {
+    assert.equal(Core.installMode({ standalone: true, ios: true, hasPrompt: true }), "installed");
+  });
+  test("a captured browser prompt is used first", () => {
+    assert.equal(Core.installMode({ standalone: false, ios: false, hasPrompt: true }), "prompt");
+  });
+  test("iPhone and iPad get the manual steps", () => {
+    assert.equal(Core.installMode({ standalone: false, ios: true, hasPrompt: false }), "ios-steps");
+  });
+  test("otherwise there is no install button", () => {
+    assert.equal(Core.installMode({ standalone: false, ios: false, hasPrompt: false }), "none");
+  });
+});
+
+describe("pushState", () => {
+  const base = { serverEnabled: true, supported: true, ios: false, standalone: false, permission: "default", subscribed: false };
+  const kind = (o) => Core.pushState({ ...base, ...o }).kind;
+
+  test("without server keys the option is unavailable", () => {
+    assert.equal(kind({ serverEnabled: false }), "unavailable");
+    assert.equal(kind({ serverEnabled: false, supported: false }), "unavailable");
+  });
+
+  test("iPhone in the browser must install first", () => {
+    const s = Core.pushState({ ...base, supported: false, ios: true, standalone: false });
+    assert.equal(s.kind, "needs-install");
+    assert.match(s.message, /Add to Home Screen/);
+    assert.equal(s.canEnable, false);
+  });
+
+  test("an installed iPhone app that still lacks support is just unsupported", () => {
+    assert.equal(kind({ supported: false, ios: true, standalone: true }), "unsupported");
+  });
+
+  test("unsupported browsers say so", () => {
+    assert.equal(kind({ supported: false }), "unsupported");
+  });
+
+  test("a denied permission is explained and cannot be changed from the page", () => {
+    const s = Core.pushState({ ...base, permission: "denied" });
+    assert.equal(s.kind, "blocked");
+    assert.equal(s.canEnable, false);
+    assert.equal(s.canDisable, false);
+  });
+
+  test("blocked wins even if a stale subscription exists", () => {
+    assert.equal(kind({ permission: "denied", subscribed: true }), "blocked");
+  });
+
+  test("granted and subscribed is on: can turn off and test", () => {
+    const s = Core.pushState({ ...base, permission: "granted", subscribed: true });
+    assert.equal(s.kind, "on");
+    assert.deepEqual([s.canEnable, s.canDisable, s.canTest], [false, true, true]);
+  });
+
+  test("not subscribed is off, even with permission already granted", () => {
+    for (const permission of ["default", "granted"]) {
+      const s = Core.pushState({ ...base, permission });
+      assert.equal(s.kind, "off", permission);
+      assert.deepEqual([s.canEnable, s.canDisable, s.canTest], [true, false, false]);
+    }
+  });
+
+  test("a subscription without permission does not count as on", () => {
+    assert.equal(kind({ permission: "default", subscribed: true }), "off");
+  });
+});
+
+describe("urlBase64ToBytes", () => {
+  test("decodes unpadded base64url, including - and _", () => {
+    assert.deepEqual([...Core.urlBase64ToBytes("AQID-_8")], [1, 2, 3, 251, 255]);
+  });
+  test("accepts padded input and the empty string", () => {
+    assert.deepEqual([...Core.urlBase64ToBytes("AQID")], [1, 2, 3]);
+    assert.deepEqual([...Core.urlBase64ToBytes("")], []);
+  });
+  test("converts a real 65-byte VAPID public key", () => {
+    const key = Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 7)]).toString("base64url");
+    const bytes = Core.urlBase64ToBytes(key);
+    assert.equal(bytes.length, 65);
+    assert.equal(bytes[0], 4);
+  });
+});

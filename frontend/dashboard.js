@@ -346,6 +346,66 @@
     }
   }
 
+  /* ── Notifications & install ─────────────────────────────────────── */
+  let pushBusy = false;
+
+  async function paintNotifications() {
+    const s = await SpondPush.state();
+    const status = $("push-status");
+    status.textContent = s.message;
+    status.dataset.kind = s.kind;
+    $("push-enable").hidden = !s.canEnable;
+    $("push-disable").hidden = !s.canDisable;
+    $("push-test").hidden = !s.canTest;
+    return s;
+  }
+
+  async function showNotifications() {
+    $("push-status").textContent = "Checking this device…";
+    for (const id of ["push-enable", "push-disable", "push-test"]) $(id).hidden = true;
+    openDialog("notifications-dialog");
+    await paintNotifications();
+  }
+
+  /** Runs one notification action with the buttons locked; errors show in the dialog. */
+  async function pushAction(fn, done) {
+    if (pushBusy) return;
+    pushBusy = true;
+    const buttons = ["push-enable", "push-disable", "push-test"].map($);
+    buttons.forEach((b) => { b.disabled = true; });
+    $("notifications-dialog").querySelector("[data-error]").hidden = true;
+    try {
+      const result = await fn();
+      await paintNotifications();
+      if (done) toast(done(result), "success");
+    } catch (err) {
+      showDialogError("notifications-dialog", err.status === 429 ? "Too many tests. Wait a minute and try again." : err.message);
+      await paintNotifications();
+    } finally {
+      buttons.forEach((b) => { b.disabled = false; });
+      pushBusy = false;
+    }
+  }
+
+  const enableNotifications = () => pushAction(SpondPush.enable, () => "Notifications are on for this device.");
+  const disableNotifications = () => pushAction(SpondPush.disable, () => "Notifications are off for this device.");
+  const testNotification = () => pushAction(SpondPush.test, (r) =>
+    r.delivered > 0 ? "Test sent. It should arrive in a moment." : "The test could not be delivered. Try turning notifications off and on again.");
+
+  async function paintNotificationsMenu() {
+    // Hidden only when the server has no push key; everything else is explained in the dialog.
+    $("menu-notifications").hidden = (await SpondPush.state()).kind === "unavailable";
+  }
+
+  function paintInstallMenu() {
+    $("menu-install").hidden = !["prompt", "ios-steps"].includes(Pwa.mode());
+  }
+
+  async function installApp() {
+    if (Pwa.mode() === "prompt") await Pwa.prompt();
+    else openDialog("install-dialog");
+  }
+
   function paintIdentity() {
     $("menu-spond-password").hidden = !state.me.linked_user_id;
     const name = state.spondUser?.display_name || state.me.username;
@@ -361,6 +421,12 @@
     $("menu-profile").addEventListener("click", showProfile);
     $("menu-password").addEventListener("click", showPassword);
     $("menu-spond-password").addEventListener("click", showSpondPassword);
+    $("menu-notifications").addEventListener("click", showNotifications);
+    $("menu-install").addEventListener("click", installApp);
+    $("push-enable").addEventListener("click", enableNotifications);
+    $("push-disable").addEventListener("click", disableNotifications);
+    $("push-test").addEventListener("click", testNotification);
+    Pwa.onChange(paintInstallMenu);
     $("spond-password-form").addEventListener("submit", saveSpondPassword);
     $("menu-signout").addEventListener("click", signOut);
     $("profile-form").addEventListener("submit", saveProfile);
@@ -399,6 +465,8 @@
     $("menu-admin").hidden = !state.me.is_admin;
     wire();
     paintIdentity();
+    paintInstallMenu();
+    paintNotificationsMenu();
 
     if (!state.me.linked_user_id) return render();
 

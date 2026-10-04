@@ -14,7 +14,13 @@ const iso = (ms) => new Date(ms).toISOString();
 const SPOND_REJECTED = "Spond did not accept that login and password. Check them in the Spond app and try again.";
 const inviteStatus = (i) => (i.used_at ? "used" : Date.parse(i.expires_at) <= NOW ? "expired" : "pending");
 
-const TYPES = { ".html": "text/html", ".css": "text/css", ".js": "application/javascript", ".svg": "image/svg+xml" };
+// A well-formed VAPID public key: 65 bytes (uncompressed P-256 point), base64url.
+const VAPID_PUBLIC_KEY = Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 9)]).toString("base64url");
+
+const TYPES = {
+  ".html": "text/html", ".css": "text/css", ".js": "application/javascript", ".svg": "image/svg+xml",
+  ".png": "image/png", ".woff2": "font/woff2", ".webmanifest": "application/manifest+json",
+};
 
 function event(id, user_id, heading, start, invite, user_choice, status, error_message = null) {
   return {
@@ -76,6 +82,7 @@ function defaultState() {
       { id: "i2", token: "valid-token", note: "Mara", created_at: iso(NOW - H), expires_at: iso(NOW + 7 * D), used_at: null },
       { id: "i3", token: "old-token", note: null, created_at: iso(NOW - 10 * D), expires_at: iso(NOW - 3 * D), used_at: null },
     ],
+    push: { enabled: true, subscriptions: [], delivered: null, testStatus: 200, subscribeStatus: 204 },
     charts: {
       latency_scatter: [
         { fired_at: iso(NOW - 2 * D), latency_ms: 41, user_name: "Felix Karg", heading: "Training, Hall B" },
@@ -215,6 +222,27 @@ class MockApi {
       return empty(204);
     }
 
+    // Web Push
+    if (method === "GET" && p === "/push/config") {
+      return json(200, { enabled: s.push.enabled, public_key: s.push.enabled ? VAPID_PUBLIC_KEY : null });
+    }
+    if (method === "POST" && p === "/push/subscribe") {
+      if (s.push.subscribeStatus !== 204) return json(s.push.subscribeStatus, { detail: "Subscribing failed on the server." });
+      s.push.subscriptions = s.push.subscriptions.filter((x) => x.endpoint !== body.endpoint);
+      s.push.subscriptions.push({ ...body, owner: me.sub });
+      return empty(204);
+    }
+    if (method === "POST" && p === "/push/unsubscribe") {
+      s.push.subscriptions = s.push.subscriptions.filter((x) => !(x.endpoint === body.endpoint && x.owner === me.sub));
+      return empty(204);
+    }
+    if (method === "POST" && p === "/push/test") {
+      if (s.push.testStatus !== 200) return json(s.push.testStatus, { detail: "Too many requests." });
+      const mine = s.push.subscriptions.filter((x) => x.owner === me.sub);
+      if (!mine.length) return json(404, { detail: "No device is subscribed. Turn notifications on first." });
+      return json(200, { devices: mine.length, delivered: s.push.delivered ?? mine.length });
+    }
+
     // Events
     if (method === "GET" && p === "/events") {
       const q = url.searchParams;
@@ -337,6 +365,79 @@ class MockApi {
   }
 }
 
+/**
+ * Replaces the browser's push machinery with a controllable fake (the real one needs Google's
+ * or Apple's servers). Options: supported, permission, grant (answer to the prompt), subscribed
+ * (a subscription exists), keyDiffers (the existing one was made with another server key),
+ * subscribeError, ios, standalone. Read back with page.evaluate(() => window.__push).
+ */
+async function installFakePush(page, opts = {}) {
+  const o = { supported: true, permission: "default", grant: true, subscribed: false, ...opts };
+  await page.addInitScript((o) => {
+    const log = [];
+    const state = { permission: o.permission, subscription: null, log, prompts: 0 };
+    const makeSub = (id, key) => ({
+      endpoint: `https://fcm.googleapis.com/fcm/send/${id}`,
+      options: { applicationServerKey: key },
+      toJSON() { return { endpoint: this.endpoint, expirationTime: null, keys: { p256dh: "p256dh-key", auth: "auth-key" } }; },
+      async unsubscribe() {
+        state.subscription = null;
+        log.push("unsubscribe");
+        sessionStorage.setItem("__push_unsubscribed", "1"); // survives the page navigation after sign-out
+        return true;
+      },
+    });
+    if (o.subscribed) state.subscription = makeSub("existing", new Uint8Array(o.keyDiffers ? 65 : 0).fill(1).buffer);
+    const reg = {
+      pushManager: {
+        async getSubscription() { return state.subscription; },
+        async subscribe(opts) {
+          log.push("subscribe");
+          if (o.subscribeError) throw new Error(o.subscribeError);
+          state.subscription = makeSub("new-device", opts.applicationServerKey.buffer.slice(0));
+          return state.subscription;
+        },
+      },
+    };
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true,
+      value: {
+        ready: Promise.resolve(reg),
+        getRegistration: async () => reg,
+        register: () => Promise.reject(new Error("service workers are faked in this test")),
+        addEventListener() {},
+        controller: null,
+      },
+    });
+    if (o.supported) {
+      window.PushManager = function PushManager() {};
+      window.Notification = {
+        permission: state.permission,
+        requestPermission: async () => {
+          state.prompts += 1;
+          state.permission = o.grant ? "granted" : "denied";
+          window.Notification.permission = state.permission;
+          return state.permission;
+        },
+      };
+    } else {
+      delete window.PushManager;
+      delete window.Notification;
+    }
+    if (o.ios) {
+      Object.defineProperty(navigator, "userAgent", {
+        configurable: true,
+        value: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+      });
+    }
+    if (o.standalone) {
+      const real = window.matchMedia.bind(window);
+      window.matchMedia = (q) => (q.includes("display-mode: standalone") ? { matches: true, media: q, addEventListener() {}, removeEventListener() {} } : real(q));
+    }
+    window.__push = state;
+  }, o);
+}
+
 const test = base.extend({
   api: async ({ page }, use) => {
     const api = new MockApi();
@@ -345,4 +446,4 @@ const test = base.extend({
   },
 });
 
-module.exports = { test, expect, NOW };
+module.exports = { test, expect, NOW, installFakePush };

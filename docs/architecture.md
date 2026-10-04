@@ -79,6 +79,10 @@ The upsert never overwrites an existing `user_choice` — only metadata (heading
 
 Both paths converge on `_process_event()`, which handles status transitions, 401 retry, and error recording.
 
+### `app/services/push.py` — Web Push
+
+After every finished RSVP attempt `_notify_member()` in the executioner publishes to the SSE stream and calls `push.dispatch_rsvp_notification()`, which sends in the background and never raises into the RSVP path. Devices are found through `push_subscriptions → frontend_users.linked_user_id = event.user_id`. Payloads are encrypted per device and signed with the VAPID key (`pywebpush`). A 404/410 from the push service deletes the subscription. Subscription endpoints must belong to a known push service (`ALLOWED_HOST_SUFFIXES`), because the server POSTs to them. Without `VAPID_PRIVATE_KEY` everything is off and the dashboard hides the option.
+
 ### `app/services/auth.py` — Token Lifecycle
 
 `ensure_fresh_token(db, user, force=False)` is the single entry point for obtaining a valid token. Strategy:
@@ -116,6 +120,10 @@ All routes are prefixed with `/api/v1/`.
 | `DELETE` | `/invites/{id}` | admin | Revoke an invite |
 | `POST` | `/invites/check` | — | Is an invite token usable? (rate-limited) |
 | `POST` | `/invites/accept` | — | Create login + connect Spond + sign in (rate-limited) |
+| `GET` | `/push/config` | user | Whether Web Push is set up, and the VAPID public key to subscribe with |
+| `POST` | `/push/subscribe` | user | Register this browser (`PushSubscription.toJSON()`); only known push services are accepted |
+| `POST` | `/push/unsubscribe` | user | Forget this browser (own devices only) |
+| `POST` | `/push/test` | user | Send a test notification to your own devices (rate-limited) |
 | `GET` | `/events` | user | List events for current user (`all=true` for admins) |
 | `GET` | `/events/{id}` | user | Get one event |
 | `PATCH` | `/events/{id}` | user | Set RSVP decision (arms/disarms sniper) |
@@ -188,6 +196,15 @@ created_at       TIMESTAMPTZ
 expires_at       TIMESTAMPTZ
 used_at          TIMESTAMPTZ     ← set atomically when accepted
 used_by_id       UUID FK → frontend_users.id (SET NULL)
+
+push_subscriptions  (one row per browser/device that gets notifications)
+──────────────────────────────────────────────────────────────
+id               UUID PK
+frontend_user_id UUID FK → frontend_users.id (CASCADE DELETE)  ← the login, not the Spond account
+endpoint         TEXT UNIQUE    ← the browser's push channel (FCM, Mozilla, Apple, WNS)
+p256dh, auth     VARCHAR        ← keys the payload is encrypted with
+user_agent       VARCHAR
+created_at       TIMESTAMPTZ
 ```
 
 ## Auth Model

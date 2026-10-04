@@ -121,7 +121,7 @@ Shipped. Members (account menu) and admins (Spond accounts table) can replace a 
 
 ---
 
-### 11. Notifications on RSVP Completion
+### 11. Notifications on RSVP Completion (browser push ✅, Telegram open)
 
 **What:** Notify users when their RSVP fires (success or failure).
 
@@ -135,14 +135,14 @@ Shipped. Members (account menu) and admins (Spond accounts table) can replace a 
 - User configures chat ID in profile settings
 - Works on mobile without HTTPS requirements
 
-**B. Browser push notifications**
-- Service worker + Web Push API
-- User opts in from dashboard
-- Requires HTTPS (already the case in production)
+**B. Browser push notifications — ✅ shipped**
+- Service worker + Web Push API, VAPID-signed (`app/services/push.py`, `frontend/push.js`)
+- Members opt in per device from the account menu; iOS needs the app on the Home Screen
+- A notification per sent or failed answer; expired devices are cleaned up automatically
 
-Telegram is simpler and more reliable on mobile.
+Telegram is simpler and more reliable on mobile and remains open.
 
-**Complexity:** Medium (Telegram); High (browser push).
+**Complexity:** Medium (Telegram).
 
 ---
 
