@@ -20,7 +20,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CurrentUser, DbDep
 from app.core.rate_limit import limiter
 from app.models.frontend_user import FrontendUser
+from app.models.notification_setting import PREFERENCE_KEYS, NotificationSetting
 from app.models.push_subscription import PushSubscription
+from app.schemas.notification import NotificationPreferences
 from app.schemas.push import (
     PushConfigResponse,
     PushSubscribeRequest,
@@ -53,6 +55,33 @@ def _require_enabled() -> None:
 @router.get("/config", response_model=PushConfigResponse, summary="Push availability and public key")
 async def get_config(current_user: dict = CurrentUser):
     return PushConfigResponse(enabled=push_service.push_enabled(), public_key=push_service.public_key())
+
+
+DEFAULT_PREFERENCES = {key: True for key in PREFERENCE_KEYS}
+
+
+@router.get("/preferences", response_model=NotificationPreferences, summary="Which notifications this login wants")
+async def get_preferences(db: AsyncSession = DbDep, current_user: dict = CurrentUser):
+    row = await db.get(NotificationSetting, await _login_id(db, current_user))
+    return row.as_dict() if row else DEFAULT_PREFERENCES
+
+
+@router.put("/preferences", response_model=NotificationPreferences, summary="Choose which notifications this login wants")
+async def put_preferences(payload: NotificationPreferences, db: AsyncSession = DbDep, current_user: dict = CurrentUser):
+    """Shared by all devices of the login. Every field is required, so nothing is reset by accident."""
+    login_id = await _login_id(db, current_user)
+    row = await db.get(NotificationSetting, login_id)
+    before = row.as_dict() if row else dict(DEFAULT_PREFERENCES)
+    after = payload.model_dump()
+    if row is None:
+        row = NotificationSetting(frontend_user_id=login_id)
+        db.add(row)
+    for key, value in after.items():
+        setattr(row, key, value)
+    await db.commit()
+    changes = {key: {"from": before[key], "to": after[key]} for key in PREFERENCE_KEYS if before[key] != after[key]}
+    audit.record("push.preferences_changed", target_type="login", target_id=login_id, details=changes)
+    return after
 
 
 @router.post("/subscribe", status_code=status.HTTP_204_NO_CONTENT, summary="Register this device")

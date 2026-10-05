@@ -27,6 +27,8 @@ import app.models.event  # noqa: F401
 import app.models.invite  # noqa: F401
 import app.models.push_subscription  # noqa: F401
 import app.models.audit_log  # noqa: F401
+import app.models.notification_setting  # noqa: F401
+import app.models.reminder_log  # noqa: F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 

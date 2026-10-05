@@ -414,3 +414,58 @@ describe("audit helpers", () => {
     assert.equal(Core.auditQuery({ cursor: "2026-10-05T11:00:00|abc" }, now), "cursor=2026-10-05T11%3A00%3A00%7Cabc");
   });
 });
+
+
+describe("notification settings", () => {
+  test("the kinds match the server's keys, in the order the dialog shows them", () => {
+    assert.deepEqual(Core.NOTIFICATION_KINDS.map((k) => k.key), ["answer_sent", "answer_failed", "reminder_8h", "reminder_4h", "reminder_1h"]);
+  });
+
+  test("every kind has a label and a hint, and keys are unique", () => {
+    for (const k of Core.NOTIFICATION_KINDS) {
+      assert.ok(k.label && k.hint && k.group, k.key);
+    }
+    assert.equal(new Set(Core.NOTIFICATION_KINDS.map((k) => k.key)).size, Core.NOTIFICATION_KINDS.length);
+  });
+
+  test("reminders say what they are about and for which events", () => {
+    for (const hours of [8, 4, 1]) {
+      const k = Core.NOTIFICATION_KINDS.find((x) => x.key === `reminder_${hours}h`);
+      assert.match(k.label, new RegExp(`^Registration opens in ${hours} hour`));
+      assert.match(k.hint, /haven't chosen/);
+    }
+  });
+
+  test("kinds are grouped for display without losing any", () => {
+    const groups = Core.notificationGroups();
+    assert.deepEqual(groups.map((g) => g.group), ["Answers", "Reminders"]);
+    assert.deepEqual(groups[0].kinds.map((k) => k.key), ["answer_sent", "answer_failed"]);
+    assert.deepEqual(groups[1].kinds.map((k) => k.key), ["reminder_8h", "reminder_4h", "reminder_1h"]);
+    assert.equal(groups.flatMap((g) => g.kinds).length, Core.NOTIFICATION_KINDS.length);
+  });
+
+  test("the audit trail names reminders and settings changes", () => {
+    assert.equal(Core.auditLabel("reminder.sent"), "Reminder sent");
+    assert.equal(Core.auditLabel("push.preferences_changed"), "Changed notification settings");
+  });
+
+  const entry = (o) => ({ actor_type: "system", actor_username: null, outcome: "success", action: "reminder.sent", ...o });
+
+  test("a reminder entry says for whom, which one and how many devices", () => {
+    assert.equal(Core.auditDetails(entry({ details: { hours: 4, member: "Mara Lind", devices: 2, delivered: 2 } })),
+      "Mara Lind · 4 h before registration opens · 2 devices");
+    assert.equal(Core.auditDetails(entry({ details: { hours: 1, member: "Mara", devices: 1, delivered: 1 } })),
+      "Mara · 1 h before registration opens · 1 device");
+  });
+
+  test("a reminder that reached no device says so", () => {
+    assert.equal(Core.auditDetails(entry({ outcome: "failed", details: { hours: 8, member: "Mara", devices: 1, delivered: 0 } })),
+      "Mara · 8 h before registration opens · not delivered");
+  });
+
+  test("a settings change reads as what changed", () => {
+    const changed = { action: "push.preferences_changed", actor_type: "user", details: {
+      answer_sent: { from: true, to: false }, reminder_8h: { from: false, to: true } } };
+    assert.equal(Core.auditDetails(changed), "answer sent: yes → no · reminder 8h: no → yes");
+  });
+});

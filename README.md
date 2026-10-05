@@ -38,7 +38,7 @@ Originally a simple cron-script, SpondBot is now a fully-fledged platform featur
 - **Zero-Trust Hardened**: All stored credentials are encrypted with a Fernet symmetric key.
 - **Admin Management Portal**: Invite members with single-use links (they connect their own Spond account, so you never handle their passwords), manage logins, and watch timing and failures.
 - **Audit Trail**: Every sign-in (also failed ones), change, refusal and every answer the bot sent is recorded with who, what, when and from where. Filter it in the admin panel and export it as CSV. Entries are deleted after 90 days by default.
-- **Push Notifications** *(optional)*: Members get a notification on their phone or desktop when SpondBot sent their answer, or failed to.
+- **Push Notifications** *(optional)*: Members get a notification on their phone or desktop when SpondBot sent their answer or failed to, and a reminder 8, 4 and 1 hours before registration opens for an event they haven't decided yet. Each member picks which of these they want.
 - **Hardened by default**: Sessions are re-checked on every request (demoting a user or changing a password takes effect immediately), strict Content-Security-Policy and security headers, rate-limited sign-in, encrypted credentials. See [docs/security.md](docs/security.md).
 - **Operations built in**: Container health checks (`/api/v1/health`) and nightly database backups with retention.
 - **Automated Deployments**: Quick-start configured with Docker & `docker-compose`.
@@ -97,7 +97,7 @@ From there, open **My events** to connect your own Spond account, and invite mem
 ### 5. Install the app and turn on notifications *(optional)*
 Members open the account menu in the dashboard:
 - **Install app** adds SpondBot to the home screen (on iPhone/iPad: Share → *Add to Home Screen*; notifications on iOS only work from the installed app).
-- **Notifications** turns on push messages for that device and can send a test message. This item only appears once `VAPID_PRIVATE_KEY` is set.
+- **Notifications** turns on push messages for that device, lets you choose which ones you get (answers sent or failed, reminders 8/4/1 hours before registration opens) and can send a test message. This item only appears once `VAPID_PRIVATE_KEY` is set.
 
 ---
 

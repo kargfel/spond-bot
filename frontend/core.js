@@ -233,6 +233,8 @@
     "push.subscribed": "Turned on notifications",
     "push.unsubscribed": "Turned off notifications",
     "push.test_sent": "Sent test notification",
+    "push.preferences_changed": "Changed notification settings",
+    "reminder.sent": "Reminder sent",
     "rsvp.sent": "Answer sent",
     "rsvp.failed": "Answer failed",
     "audit.exported": "Exported audit log",
@@ -279,6 +281,15 @@
     const d = entry.details;
     if (!d || typeof d !== "object") return "";
     if (entry.action === "event.choice_set") return `${humanValue(d.from)} → ${humanValue(d.to)}`;
+    if (entry.action === "reminder.sent") {
+      const parts = [];
+      if (d.member) parts.push(d.member);
+      if (d.hours) parts.push(`${d.hours} h before registration opens`);
+      if (typeof d.devices === "number") {
+        parts.push(entry.outcome === "failed" ? "not delivered" : d.devices === 1 ? "1 device" : `${d.devices} devices`);
+      }
+      return parts.join(" · ");
+    }
     if (entry.action === "rsvp.sent" || entry.action === "rsvp.failed") {
       const parts = [];
       if (d.member) parts.push(d.member);
@@ -316,6 +327,28 @@
     if (cursor) params.set("cursor", cursor);
     if (limit) params.set("limit", String(limit));
     return params.toString();
+  }
+
+  /* ── Notification settings ─────────────────────────────────────── */
+
+  /** The notifications a member can switch on and off, in the order the dialog shows them. `key` matches the API. */
+  const NOTIFICATION_KINDS = [
+    { key: "answer_sent", group: "Answers", label: "Answer sent", hint: "SpondBot answered an event for you." },
+    { key: "answer_failed", group: "Answers", label: "Answer failed", hint: "SpondBot could not answer, so you can step in." },
+    { key: "reminder_8h", group: "Reminders", label: "Registration opens in 8 hours", hint: "Only for events you haven't chosen an answer for." },
+    { key: "reminder_4h", group: "Reminders", label: "Registration opens in 4 hours", hint: "Only for events you haven't chosen an answer for." },
+    { key: "reminder_1h", group: "Reminders", label: "Registration opens in 1 hour", hint: "Only for events you haven't chosen an answer for." },
+  ];
+
+  /** The kinds grouped for display: [{ group, kinds: [...] }] in the order above. */
+  function notificationGroups() {
+    const groups = [];
+    for (const kind of NOTIFICATION_KINDS) {
+      let g = groups.find((x) => x.group === kind.group);
+      if (!g) groups.push((g = { group: kind.group, kinds: [] }));
+      g.kinds.push(kind);
+    }
+    return groups;
   }
 
   /* ── App install & notifications ───────────────────────────────── */
@@ -387,6 +420,8 @@
     auditDetails,
     auditTarget,
     auditQuery,
+    NOTIFICATION_KINDS,
+    notificationGroups,
     installMode,
     pushState,
     urlBase64ToBytes,

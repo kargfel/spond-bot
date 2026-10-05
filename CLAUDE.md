@@ -53,11 +53,14 @@ app/
     rsvp_log.py            Audit log of every RSVP attempt
     invite.py              Single-use invite link (token stored as SHA-256 hash)
     push_subscription.py   One browser/device that gets Web Push (belongs to a dashboard login)
+    notification_setting.py Which notifications a login wants (PREFERENCE_KEYS); no row = all on
+    reminder_log.py        Reminders already sent (event + hours): claiming a row makes sending at-most-once
     audit_log.py           Append-only audit trail row (who/what/target/outcome/IP, no FKs)
   services/
     auth.py                ensure_fresh_token() — token lifecycle
     spond_accounts.py      Verify Spond credentials + build encrypted User row
-    push.py                Web Push: VAPID key, payloads, sending, expired-subscription cleanup
+    push.py                Web Push: VAPID key, payloads, sending (honours notification settings via `kind`), expired-subscription cleanup
+    reminders.py           "Registration opens in 8/4/1 h" reminders for undecided events (scheduler job every minute)
     audit.py               Audit trail: record()/record_system(), AuditMiddleware, scrubbing, nightly purge
   workers/
     discovery.py           Worker A: sync events from Spond for all users
@@ -144,6 +147,8 @@ Member-facing labels: `accept`/`decline`/`manual` are shown as Going / Not going
 - `/sw.js`, `/sw-core.js` and the manifest have explicit routes in `app/main.py` with `Cache-Control: no-cache`; the catch-all asset whitelist includes `.woff2`.
 - Fonts are self-hosted (`frontend/fonts/`); there are no requests to Google.
 - Web Push is optional: it needs `VAPID_PRIVATE_KEY` (`scripts/generate_vapid_key.py`); the public key is derived from it. The executioner's `_notify_member()` sends the SSE event and the push. Subscription endpoints are restricted to real push services (SSRF guard). Push must never block or fail an RSVP.
+- Notification kinds: `answer_sent`, `answer_failed`, `reminder_8h`, `reminder_4h`, `reminder_1h` (`PREFERENCE_KEYS`), chosen per **account** (`/push/preferences`, all devices). Every send passes a `kind` to `push.send_to_spond_user`, which skips logins that switched it off (the test notification is the only unfiltered send). A new kind needs: the key in `PREFERENCE_KEYS`, a column + migration, the schema field, an entry in `Core.NOTIFICATION_KINDS`, and the sender passing `kind=`.
+- Reminders mean what the dashboard inbox means by *undecided*: `manual`, not answered, registration opening ahead. The reminder is claimed in `reminder_log` before it is sent. Never send reminders without that claim.
 - E2E: service worker specs (`pwa.spec.js`) run against a real local server; all other specs block service workers. Push UI specs use `installFakePush`.
 
 ## Event Lifecycle

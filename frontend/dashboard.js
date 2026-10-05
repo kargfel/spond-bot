@@ -20,6 +20,7 @@
     tab: "upcoming",
     inboxIndex: 0,
     busy: new Set(),
+    prefs: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -357,7 +358,58 @@
     $("push-enable").hidden = !s.canEnable;
     $("push-disable").hidden = !s.canDisable;
     $("push-test").hidden = !s.canTest;
+    await paintPreferences(s.kind);
     return s;
+  }
+
+  /* Which notifications to get: shown once this device can get them (on) or could (off). */
+  async function paintPreferences(kind) {
+    const form = $("push-prefs");
+    form.hidden = !["on", "off"].includes(kind);
+    if (form.hidden) return;
+    if (!state.prefs) {
+      try {
+        state.prefs = await SpondPush.preferences();
+      } catch {
+        form.hidden = true; // no settings, no half-working form
+        return;
+      }
+    }
+    renderPreferences();
+  }
+
+  function renderPreferences() {
+    $("push-prefs-list").innerHTML = Core.notificationGroups().map((g) => `
+      <fieldset class="pref-group">
+        <legend>${esc(g.group)}</legend>
+        ${g.kinds.map((k) => `
+          <label class="pref-item" for="pref-${esc(k.key)}">
+            <input type="checkbox" id="pref-${esc(k.key)}" data-pref="${esc(k.key)}" ${state.prefs[k.key] ? "checked" : ""} />
+            <span><b>${esc(k.label)}</b><small>${esc(k.hint)}</small></span>
+          </label>`).join("")}
+      </fieldset>`).join("");
+  }
+
+  let prefsSavedTimer = null;
+
+  /** Saves right away; if the server refuses, the switch goes back and the dialog says why. */
+  async function savePreference(input) {
+    const boxes = [...document.querySelectorAll("[data-pref]")];
+    const next = { ...state.prefs, [input.dataset.pref]: input.checked };
+    boxes.forEach((b) => { b.disabled = true; });
+    $("notifications-dialog").querySelector("[data-error]").hidden = true;
+    try {
+      state.prefs = await SpondPush.savePreferences(next);
+      const saved = $("push-prefs-saved");
+      saved.textContent = "Saved.";
+      clearTimeout(prefsSavedTimer);
+      prefsSavedTimer = setTimeout(() => { saved.textContent = ""; }, 2500);
+    } catch (err) {
+      input.checked = !input.checked;
+      showDialogError("notifications-dialog", `Could not save: ${err.message}`);
+    } finally {
+      boxes.forEach((b) => { b.disabled = false; });
+    }
   }
 
   async function showNotifications() {
@@ -426,6 +478,9 @@
     $("push-enable").addEventListener("click", enableNotifications);
     $("push-disable").addEventListener("click", disableNotifications);
     $("push-test").addEventListener("click", testNotification);
+    $("push-prefs").addEventListener("change", (e) => {
+      if (e.target.matches("[data-pref]")) savePreference(e.target);
+    });
     Pwa.onChange(paintInstallMenu);
     $("spond-password-form").addEventListener("submit", saveSpondPassword);
     $("menu-signout").addEventListener("click", signOut);

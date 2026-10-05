@@ -36,6 +36,7 @@ Script order on every page: `core.js`, then `app.js`, (`push.js` on the dashboar
 - **Offline page** (`offline.html`): checks `/api/v1/health` by itself (on `online`, every 8 s while visible, on "Try again") and reloads when the server answers. It tells apart "your device is offline" from "the server isn't answering".
 - **Updates**: a new worker waits; `app.js` shows a "new version" banner and swaps only when the member clicks Reload. Bump `VERSION` in `sw.js` when caching rules or the precache list change, and the `?v=` on its `importScripts` line when `sw-core.js` changes.
 - **Install**: `Pwa` in `app.js` captures `beforeinstallprompt`; the account menu shows *Install app* with the browser prompt or, on iOS, the Home Screen steps.
+- **Notification settings**: the same dialog lists what to be notified about (`Core.NOTIFICATION_KINDS`: answers sent/failed, reminders 8/4/1 h before registration opens). Switches save immediately as a full set (`PUT /push/preferences`), lock while saving, and go back with an error if the server refuses. The settings belong to the account, so the form is also shown on a device that hasn't turned notifications on yet.
 - **Notifications**: account menu → Notifications. `push.js` asks permission only from the click, subscribes with the server's VAPID key and registers the device (`/push/subscribe`). The worker shows the notification and opens the dashboard on click. Signing out removes the device.
 
 ## Member dashboard

@@ -15,7 +15,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="member.css?v=3" />
+    <link rel="stylesheet" href="member.css?v=4" />
   </head>
   <body>
     <header class="topbar">
@@ -151,6 +151,12 @@
         <h2 id="notifications-title">Notifications</h2>
         <p class="form-error" role="alert" data-error hidden></p>
         <p class="push-status" id="push-status" data-kind="off" role="status">Checking this device…</p>
+        <form class="pref-form" id="push-prefs" aria-labelledby="push-prefs-title" hidden>
+          <h3 id="push-prefs-title">What to notify me about</h3>
+          <p class="hint">These settings apply to all your devices and are saved as you change them.</p>
+          <div id="push-prefs-list"></div>
+          <p class="pref-saved" id="push-prefs-saved" aria-live="polite"></p>
+        </form>
         <div class="dialog-actions dialog-actions-wrap">
           <button type="button" class="btn btn-quiet" data-close>Close</button>
           <button type="button" class="btn" id="push-test" hidden>Send test</button>
@@ -175,9 +181,9 @@
       </div>
     </dialog>
 
-    <script src="core.js?v=4"></script>
+    <script src="core.js?v=5"></script>
     <script src="app.js?v=9"></script>
-    <script src="push.js?v=1"></script>
-    <script src="dashboard.js?v=4"></script>
+    <script src="push.js?v=2"></script>
+    <script src="dashboard.js?v=5"></script>
   </body>
 </html>

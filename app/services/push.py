@@ -20,12 +20,13 @@ import aiohttp
 from cryptography.hazmat.primitives import serialization
 from py_vapid import Vapid02
 from pywebpush import WebPushException, webpush_async
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.frontend_user import FrontendUser
+from app.models.notification_setting import PREFERENCE_KEYS, NotificationSetting
 from app.models.push_subscription import PushSubscription
 
 logger = logging.getLogger(__name__)
@@ -174,19 +175,27 @@ async def send_to_login(db: AsyncSession, frontend_user_id: uuid.UUID, payload: 
     return len(subs), await _deliver(db, subs, payload)
 
 
-async def send_to_spond_user(db: AsyncSession, spond_user_id: uuid.UUID, payload: dict) -> tuple[int, int]:
-    """Notify every device of the dashboard login(s) linked to a Spond account."""
-    subs = list(
-        (
-            await db.execute(
-                select(PushSubscription)
-                .join(FrontendUser, PushSubscription.frontend_user_id == FrontendUser.id)
-                .where(FrontendUser.linked_user_id == spond_user_id)
-            )
-        )
-        .scalars()
-        .all()
+async def send_to_spond_user(
+    db: AsyncSession, spond_user_id: uuid.UUID, payload: dict, kind: str | None = None
+) -> tuple[int, int]:
+    """
+    Notify every device of the dashboard login(s) linked to a Spond account.
+
+    `kind` (one of PREFERENCE_KEYS) restricts this to logins that have that notification
+    switched on; a login without saved settings has everything on. The first number returned
+    counts the devices that were eligible, so 0 means nobody wanted this notification.
+    """
+    query = (
+        select(PushSubscription)
+        .join(FrontendUser, PushSubscription.frontend_user_id == FrontendUser.id)
+        .outerjoin(NotificationSetting, NotificationSetting.frontend_user_id == FrontendUser.id)
+        .where(FrontendUser.linked_user_id == spond_user_id)
     )
+    if kind is not None:
+        if kind not in PREFERENCE_KEYS:
+            raise ValueError(f"Unknown notification kind {kind!r}")
+        query = query.where(func.coalesce(getattr(NotificationSetting, kind), True).is_(True))
+    subs = list((await db.execute(query)).scalars().all())
     return len(subs), await _deliver(db, subs, payload)
 
 
@@ -194,7 +203,8 @@ async def notify_rsvp(spond_user_id: uuid.UUID, event_id: uuid.UUID, heading: st
     """Background entry point for the executioner. Never raises."""
     try:
         async with AsyncSessionLocal() as db:
-            await send_to_spond_user(db, spond_user_id, build_rsvp_payload(event_id, heading, choice, outcome))
+            kind = "answer_sent" if outcome == "success" else "answer_failed"
+            await send_to_spond_user(db, spond_user_id, build_rsvp_payload(event_id, heading, choice, outcome), kind=kind)
     except Exception:
         logger.exception("Push notification for event %s failed.", event_id)
 
