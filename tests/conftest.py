@@ -8,6 +8,8 @@ os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost:
 os.environ.setdefault("FERNET_KEY", "ZmDfcTF7_60GrrY167zsiPd67pEvs0aGOv2oasOM1Pg=")
 os.environ.setdefault("API_KEY", "test-api-key")
 os.environ.setdefault("ADMIN_PASSWORD", "test-admin-password")
+# Audit rows go to Postgres through their own session; tests that care opt in (tests/test_audit_*.py).
+os.environ.setdefault("AUDIT_ENABLED", "false")
 
 import pytest  # noqa: E402
 from httpx import AsyncClient, ASGITransport  # noqa: E402
@@ -24,6 +26,7 @@ import app.models.user  # noqa: F401
 import app.models.event  # noqa: F401
 import app.models.invite  # noqa: F401
 import app.models.push_subscription  # noqa: F401
+import app.models.audit_log  # noqa: F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -128,3 +131,35 @@ def spond_api():
         login.return_value = ("spond-token", datetime.now(timezone.utc))
         profile.return_value = "PROFILE-123"
         yield login
+
+
+@pytest.fixture
+def real_sessions(monkeypatch, test_db):
+    """Let real session cookies be checked against the test database (see deps._get_current_user)."""
+    from contextlib import asynccontextmanager
+
+    from app.api import deps
+
+    @asynccontextmanager
+    async def session():
+        yield test_db
+
+    monkeypatch.setattr(deps, "open_session", session)
+
+
+@pytest.fixture
+def audit_on(monkeypatch, test_db, real_sessions):
+    """Turn the audit trail on and write its rows into the test database."""
+    from contextlib import asynccontextmanager
+
+    from app.config import settings
+    from app.services import audit
+
+    monkeypatch.setattr(settings, "audit_enabled", True)
+
+    @asynccontextmanager
+    async def session():
+        yield test_db
+
+    monkeypatch.setattr(audit, "open_session", session)
+    return audit

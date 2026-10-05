@@ -23,6 +23,7 @@ from app.core.spond_client import SpondAuthError, parse_event_timestamps
 from app.database import AsyncSessionLocal
 from app.models.event import CHOICE_ACCEPT, CHOICE_MANUAL, STATUS_PENDING, Event
 from app.models.user import User
+from app.services import audit
 from app.services.auth import ensure_fresh_token
 from app.workers.executioner import schedule_sniper
 from app.workers.scheduler import get_scheduler
@@ -61,6 +62,7 @@ async def run_discovery() -> None:
 
     global last_discovery_at
     last_discovery_at = datetime.now(timezone.utc)
+    await audit.record_system("discovery.completed")
     await bus.publish_admin("discovery_completed", {
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })

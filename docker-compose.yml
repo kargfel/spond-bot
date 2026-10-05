@@ -28,6 +28,11 @@ services:
       - .env
     environment:
       - TZ=${TZ:-Europe/Berlin}
+    # The app needs no extra privileges: it listens on an unprivileged port as a non-root user.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     # Health: the image's HEALTHCHECK polls /api/v1/health (see Dockerfile).
     # Only the optional autoheal service below acts on this label.
     labels:

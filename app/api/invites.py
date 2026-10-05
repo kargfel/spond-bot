@@ -35,6 +35,7 @@ from app.schemas.invite import (
     InviteCreated,
     InviteResponse,
 )
+from app.services import audit
 from app.services.spond_accounts import connect_spond_account, ensure_login_available
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,8 @@ async def create_invite(payload: InviteCreate, db: AsyncSession = DbDep, current
     db.add(invite)
     await db.commit()
     await db.refresh(invite)
+    audit.record("invite.created", target_type="invite", target_id=invite.id, target_label=invite.note,
+                 details={"days_valid": payload.days_valid, "expires_at": invite.expires_at})
     logger.info("Invite %s created by %r (note=%r).", invite.id, current_user.get("username"), invite.note)
     return {**_to_response(invite, now), "token": token}
 
@@ -95,8 +98,11 @@ async def revoke_invite(invite_id: uuid.UUID, db: AsyncSession = DbDep):
     invite = await db.get(Invite, invite_id)
     if not invite:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found.")
+    note, status_ = invite.note, invite.status()
     await db.delete(invite)
     await db.commit()
+    audit.record("invite.revoked", target_type="invite", target_id=invite_id, target_label=note,
+                 details={"status_was": status_})
 
 
 # ── Public ────────────────────────────────────────────────────────────────
@@ -114,6 +120,14 @@ async def check_invite(request: Request, payload: InviteCheckRequest, db: AsyncS
     return {"valid": True, "reason": None, "note": invite.note, "expires_at": invite.expires_at}
 
 
+def _accept_failed(reason: str, invite: Invite | None, username: str | None = None) -> None:
+    audit.record(
+        "invite.accept_failed", outcome="denied", actor=None, target_type="invite",
+        target_id=invite.id if invite else None, target_label=invite.note if invite else None,
+        details={"reason": reason, "username": (username or "")[:64] or None},
+    )
+
+
 _GONE = {
     None: "This invite link is not valid. Ask your admin for a new one.",
     STATUS_USED: "This invite has already been used. Sign in with the login you created, or ask your admin for a new invite.",
@@ -129,14 +143,19 @@ async def accept_invite(request: Request, response: Response, payload: InviteAcc
     invite = await _find(db, payload.token)
     state = invite.status() if invite else None
     if state != STATUS_PENDING:
+        _accept_failed("invite_" + (state or "unknown"), invite)
         raise HTTPException(status_code=status.HTTP_410_GONE, detail=_GONE[state])
 
     taken = await db.execute(select(FrontendUser.id).where(FrontendUser.username == payload.username))
     if taken.scalar_one_or_none():
+        _accept_failed("username_taken", invite, payload.username)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="That username is taken. Pick another one.")
-    await ensure_login_available(db, payload.spond_login)
-
-    spond_user = await connect_spond_account(payload.spond_login, payload.spond_password, payload.display_name)
+    try:
+        await ensure_login_available(db, payload.spond_login)
+        spond_user = await connect_spond_account(payload.spond_login, payload.spond_password, payload.display_name)
+    except HTTPException as exc:
+        _accept_failed("spond_rejected" if exc.status_code == 401 else "spond_account_unavailable", invite, payload.username)
+        raise
 
     # Claim the invite atomically so two simultaneous requests cannot both use it.
     now = datetime.now(timezone.utc)
@@ -145,6 +164,7 @@ async def accept_invite(request: Request, response: Response, payload: InviteAcc
     )
     if claimed.rowcount != 1:
         await db.rollback()
+        _accept_failed("invite_used", invite, payload.username)
         raise HTTPException(status_code=status.HTTP_410_GONE, detail=_GONE[STATUS_USED])
 
     login = FrontendUser(
@@ -163,5 +183,7 @@ async def accept_invite(request: Request, response: Response, payload: InviteAcc
     await db.refresh(login)
 
     set_session_cookie(response, login)
+    audit.record("invite.accepted", actor=login, target_type="invite", target_id=invite.id, target_label=invite.note,
+                 details={"username": login.username, "spond_login": spond_user.login})
     logger.info("Invite %s accepted: login %r linked to Spond account %r.", invite.id, login.username, spond_user.login)
     return login

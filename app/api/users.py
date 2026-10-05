@@ -25,6 +25,7 @@ from app.core.security import encrypt
 from app.core.session import set_session_cookie
 from app.models.frontend_user import FrontendUser
 from app.models.user import User
+from app.services import audit
 from app.schemas.user import SpondConnect, SpondPasswordUpdate, UserCreate, UserResponse, UserUpdate
 from app.services.spond_accounts import connect_spond_account, ensure_login_available, verify_credentials
 
@@ -61,6 +62,8 @@ async def create_user(payload: UserCreate, db: AsyncSession = DbDep):
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    audit.record("spond_account.created", target_type="spond_account", target_id=user.id,
+                 target_label=user.display_name, details={"login": user.login})
     logger.info("Registered Spond user %r (profile_id=%s)", user.display_name, user.profile_id)
     return user
 
@@ -104,6 +107,8 @@ async def connect_own_account(
     await db.refresh(login)
 
     set_session_cookie(response, login)
+    audit.record("spond_account.connected", target_type="spond_account", target_id=user.id,
+                 target_label=user.display_name, details={"login": user.login})
     logger.info("Login %r connected Spond account %r.", login.username, user.login)
     return user
 
@@ -152,14 +157,21 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
+    changes: dict = {}
     if payload.display_name is not None:
+        if payload.display_name != user.display_name:
+            changes["display_name"] = {"from": user.display_name, "to": payload.display_name}
         user.display_name = payload.display_name
     # Non-admins cannot deactivate themselves
     if payload.is_active is not None and current_user.get("is_admin"):
+        if payload.is_active != user.is_active:
+            changes["is_active"] = {"from": user.is_active, "to": payload.is_active}
         user.is_active = payload.is_active
 
     await db.commit()
     await db.refresh(user)
+    audit.record("spond_account.updated", target_type="spond_account", target_id=user.id,
+                 target_label=user.display_name, details=changes)
     return user
 
 
@@ -187,8 +199,16 @@ async def update_spond_password(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
-    token, acquired_at, profile_id = await verify_credentials(user.login, payload.password)
+    try:
+        token, acquired_at, profile_id = await verify_credentials(user.login, payload.password)
+    except HTTPException as exc:
+        audit.record("spond_account.password_updated", outcome="denied", target_type="spond_account",
+                     target_id=user.id, target_label=user.display_name,
+                     details={"reason": "spond_rejected_credentials", "status": exc.status_code})
+        raise
     if user.profile_id and profile_id != user.profile_id:
+        audit.record("spond_account.password_updated", outcome="denied", target_type="spond_account",
+                     target_id=user.id, target_label=user.display_name, details={"reason": "different_profile"})
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="This Spond login now belongs to a different Spond profile. Delete the account and connect it again.",
@@ -200,6 +220,8 @@ async def update_spond_password(
     user.profile_id = profile_id
     await db.commit()
     await db.refresh(user)
+    audit.record("spond_account.password_updated", target_type="spond_account", target_id=user.id,
+                 target_label=user.display_name)
     logger.info("Spond password updated for %r by %r.", user.login, current_user.get("username"))
     return user
 
@@ -214,5 +236,8 @@ async def delete_user(user_id: uuid.UUID, db: AsyncSession = DbDep):
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    name, login = user.display_name, user.login
     await db.delete(user)
     await db.commit()
+    audit.record("spond_account.deleted", target_type="spond_account", target_id=user_id, target_label=name,
+                 details={"login": login})

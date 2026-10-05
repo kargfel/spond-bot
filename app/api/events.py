@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CurrentUser, DbDep
 from app.models.event import CHOICE_ACCEPT, CHOICE_MANUAL, STATUS_PENDING, Event
 from app.schemas.event import EventDecisionUpdate, EventResponse
+from app.services import audit
 from app.workers.executioner import cancel_sniper, schedule_sniper
 from app.workers.scheduler import get_scheduler
 
@@ -123,6 +124,7 @@ async def set_decision(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
     _assert_event_access(event, current_user)
 
+    previous = event.user_choice
     event.user_choice = payload.user_choice
 
     if event.status == "failed" and payload.user_choice != CHOICE_MANUAL:
@@ -138,6 +140,10 @@ async def set_decision(
     else:
         cancel_sniper(scheduler, event.id)
 
+    audit.record(
+        "event.choice_set", target_type="event", target_id=event.id, target_label=event.heading,
+        details={"from": previous, "to": payload.user_choice, "owner_user_id": event.user_id, "status": event.status},
+    )
     logger.info(
         "Decision set to %r for event %s (%r) by %r",
         payload.user_choice,

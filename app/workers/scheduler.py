@@ -19,6 +19,7 @@ _scheduler = AsyncIOScheduler(timezone=settings.tz)
 
 def start_scheduler() -> None:
     from app.workers.discovery import run_discovery
+    from app.services.audit import run_purge
     from app.workers.executioner import run_executioner
 
     _scheduler.add_job(
@@ -38,6 +39,15 @@ def start_scheduler() -> None:
         max_instances=1,
         coalesce=True,
         misfire_grace_time=15,
+    )
+
+    _scheduler.add_job(
+        run_purge,
+        trigger=CronTrigger(hour=3, minute=17, timezone=settings.tz),
+        id="audit_purge",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
     )
 
     _scheduler.start()

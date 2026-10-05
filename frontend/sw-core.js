@@ -16,7 +16,8 @@
   const BADGE = "/icons/badge-96.png";
 
   /** Files stored at install time so the offline page renders without the network. */
-  const PRECACHE_URLS = [OFFLINE_URL, "/icons/logo.png", ICON, BADGE, "/icons/favicon-32.png", FONTS_CSS];
+  const OFFLINE_JS = "/offline.js?v=1";
+  const PRECACHE_URLS = [OFFLINE_URL, OFFLINE_JS, "/icons/logo.png", ICON, BADGE, "/icons/favicon-32.png", FONTS_CSS];
 
   /** Static files worth keeping for the next start. Everything else goes to the network. */
   const ASSET_PATH = /\.(?:css|js|png|svg|ico|woff2|webmanifest)$/i;

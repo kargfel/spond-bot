@@ -15,7 +15,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="admin.css?v=3" />
+    <link rel="stylesheet" href="admin.css?v=4" />
     <script
       src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
       integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g"
@@ -30,7 +30,7 @@
         <a href="#queue" data-view="queue">Queue</a>
         <a href="#timeline" data-view="timeline">Timeline</a>
         <a href="#users" data-view="users">Users</a>
-        <a href="#log" data-view="log">Log</a>
+        <a href="#audit" data-view="audit">Audit</a>
         <a href="#charts" data-view="charts">Charts</a>
       </nav>
       <div class="bar-right">
@@ -149,29 +149,58 @@
         <div><button class="btn" type="button" id="add-spond-btn">Connect Spond account</button></div>
       </section>
 
-      <!-- ── Log ───────────────────────────────────────────────────── -->
-      <section class="view" id="view-log" aria-labelledby="log-title" hidden>
+      <!-- ── Audit ─────────────────────────────────────────────────── -->
+      <section class="view" id="view-audit" aria-labelledby="audit-title" hidden>
         <div class="view-head">
-          <div><h1 id="log-title">Log</h1><p>Every answer SpondBot tried to send, newest first. Latency is measured from registration opening.</p></div>
+          <div><h1 id="audit-title">Audit</h1><p>Everything that happens: answers SpondBot sent, sign-ins, changes and refusals, newest first. Old entries are removed automatically.</p></div>
+          <button type="button" class="btn" id="audit-export">Export CSV</button>
         </div>
         <div class="filters">
-          <div class="field"><label for="log-account">Account</label><select class="input" id="log-account"><option value="">All accounts</option></select></div>
+          <div class="field grow"><label for="audit-q">Find</label><input class="input" id="audit-q" type="search" placeholder="Member, user, action, event, IP or path" autocomplete="off" /></div>
           <div class="field">
-            <label for="log-outcome">Outcome</label>
-            <select class="input" id="log-outcome">
-              <option value="">All outcomes</option>
+            <label for="audit-category">Area</label>
+            <select class="input" id="audit-category">
+              <option value="">All areas</option>
+              <option value="auth">Sign-in</option>
+              <option value="account">Logins</option>
+              <option value="spond_account">Spond accounts</option>
+              <option value="invite">Invites</option>
+              <option value="event">Answers set</option>
+              <option value="rsvp">Answers sent</option>
+              <option value="scheduler">Scheduler</option>
+              <option value="discovery">Sync</option>
+              <option value="push">Notifications</option>
+              <option value="audit">Audit log</option>
+              <option value="http">Other requests</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="audit-outcome">Result</label>
+            <select class="input" id="audit-outcome">
+              <option value="">All results</option>
               <option value="success">Succeeded</option>
-              <option value="retry_success">Succeeded after retry</option>
+              <option value="denied">Refused</option>
               <option value="failed">Failed</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="audit-range">Period</label>
+            <select class="input" id="audit-range">
+              <option value="1h">Last hour</option>
+              <option value="24h">Last 24 hours</option>
+              <option value="7d" selected>Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="all">Everything kept</option>
             </select>
           </div>
         </div>
         <div class="table-wrap">
-          <table aria-label="Answer log">
-            <thead><tr><th>Fired at</th><th>Account</th><th>Event</th><th>Answer</th><th>Outcome</th><th class="num">Latency</th><th class="num">Retries</th><th>Error</th></tr></thead>
-            <tbody id="log-body"></tbody>
+          <table aria-label="Audit trail">
+            <thead><tr><th>Time</th><th>Who</th><th>Action</th><th>Target</th><th>Result</th><th>IP</th></tr></thead>
+            <tbody id="audit-body"></tbody>
           </table>
         </div>
+        <div class="audit-more"><button type="button" class="btn" id="audit-more" hidden>Load more</button></div>
       </section>
 
       <!-- ── Charts ────────────────────────────────────────────────── -->
@@ -300,8 +329,8 @@
       </form>
     </dialog>
 
-    <script src="core.js?v=2"></script>
+    <script src="core.js?v=4"></script>
     <script src="app.js?v=9"></script>
-    <script src="admin.js?v=3"></script>
+    <script src="admin.js?v=5"></script>
   </body>
 </html>

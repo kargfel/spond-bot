@@ -206,6 +206,118 @@
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /* ── Audit trail ───────────────────────────────────────────────── */
+
+  const AUDIT_LABELS = {
+    "auth.login.success": "Signed in",
+    "auth.login.failed": "Failed sign-in",
+    "auth.logout": "Signed out",
+    "auth.password_changed": "Changed own password",
+    "account.created": "Created login",
+    "account.updated": "Updated login",
+    "account.deleted": "Deleted login",
+    "spond_account.created": "Added Spond account",
+    "spond_account.connected": "Connected Spond account",
+    "spond_account.updated": "Updated Spond account",
+    "spond_account.password_updated": "Replaced Spond password",
+    "spond_account.deleted": "Deleted Spond account",
+    "invite.created": "Created invite",
+    "invite.revoked": "Revoked invite",
+    "invite.accepted": "Accepted invite",
+    "invite.accept_failed": "Failed to accept invite",
+    "event.choice_set": "Set answer",
+    "scheduler.job_cancelled": "Disarmed answer",
+    "scheduler.job_fired": "Sent answer now",
+    "discovery.triggered": "Started sync",
+    "discovery.completed": "Sync finished",
+    "push.subscribed": "Turned on notifications",
+    "push.unsubscribed": "Turned off notifications",
+    "push.test_sent": "Sent test notification",
+    "rsvp.sent": "Answer sent",
+    "rsvp.failed": "Answer failed",
+    "audit.exported": "Exported audit log",
+    "audit.purged": "Removed old audit entries",
+  };
+
+  const AUDIT_REASONS = {
+    unknown_user: "unknown user",
+    wrong_password: "wrong password",
+    wrong_current_password: "wrong current password",
+    spond_rejected_credentials: "Spond rejected the login",
+    spond_rejected: "Spond rejected the login",
+    spond_account_unavailable: "Spond account unavailable",
+    different_profile: "belongs to a different Spond profile",
+    username_taken: "username taken",
+    invite_unknown: "invite not valid",
+    invite_used: "invite already used",
+    invite_expired: "invite expired",
+  };
+
+  /** "auth.login.failed" → "Failed sign-in"; unlisted writes ("http.post") → "POST request". */
+  function auditLabel(action) {
+    if (AUDIT_LABELS[action]) return AUDIT_LABELS[action];
+    if (typeof action === "string" && action.startsWith("http.")) return `${action.slice(5).toUpperCase()} request`;
+    return action || "Unknown";
+  }
+
+  /** Who did it: the login, the bot, or nobody (not signed in). */
+  function auditWho(entry) {
+    if (entry.actor_type === "system") return "SpondBot";
+    if (entry.actor_type === "anonymous" || !entry.actor_username) return "Not signed in";
+    return entry.actor_username;
+  }
+
+  const humanValue = (v) => {
+    if (v === true) return "yes";
+    if (v === false) return "no";
+    if (v === null || v === undefined || v === "") return "none";
+    return CHOICE_LABELS[v] || String(v);
+  };
+
+  /** One-line summary of an entry's details, e.g. "Leave to me → Going". Empty when there is nothing to add. */
+  function auditDetails(entry) {
+    const d = entry.details;
+    if (!d || typeof d !== "object") return "";
+    if (entry.action === "event.choice_set") return `${humanValue(d.from)} → ${humanValue(d.to)}`;
+    if (entry.action === "rsvp.sent" || entry.action === "rsvp.failed") {
+      const parts = [];
+      if (d.member) parts.push(d.member);
+      if (d.choice) parts.push(CHOICE_LABELS[d.choice] || d.choice);
+      if (typeof d.latency_ms === "number") parts.push(d.latency_ms < 0 ? `${-d.latency_ms} ms before opening` : `${d.latency_ms} ms after opening`);
+      if (d.retries) parts.push(d.retries === 1 ? "after 1 retry" : `after ${d.retries} retries`);
+      if (d.error) parts.push(d.error);
+      return parts.join(" · ");
+    }
+    const parts = [];
+    for (const [key, value] of Object.entries(d)) {
+      if (key === "reason") parts.push(AUDIT_REASONS[value] || String(value).replace(/_/g, " "));
+      else if (value && typeof value === "object" && "from" in value && "to" in value) {
+        parts.push(`${key.replace(/_/g, " ")}: ${humanValue(value.from)} → ${humanValue(value.to)}`);
+      } else if (value === true) parts.push(key.replace(/_/g, " "));
+      else if (value !== null && value !== undefined && value !== false && value !== "") parts.push(`${key.replace(/_/g, " ")}: ${humanValue(value)}`);
+    }
+    return parts.join(" · ");
+  }
+
+  /** What was acted on: "Training, Hall B", "login felix", or empty. */
+  function auditTarget(entry) {
+    if (entry.target_label) return entry.target_type && entry.target_type !== "event" ? `${entry.target_type.replace(/_/g, " ")} ${entry.target_label}` : entry.target_label;
+    return entry.target_id ? String(entry.target_id).slice(0, 8) : "";
+  }
+
+  /** Query string for /admin/audit from the filter form values (empty values are left out). */
+  function auditQuery({ q, category, outcome, range, cursor, limit }, now = Date.now()) {
+    const params = new URLSearchParams();
+    if (q && q.trim()) params.set("q", q.trim());
+    if (category) params.set("category", category);
+    if (outcome) params.set("outcome", outcome);
+    const spans = { "1h": 3600e3, "24h": 24 * 3600e3, "7d": 7 * 24 * 3600e3, "30d": 30 * 24 * 3600e3 };
+    if (spans[range]) params.set("since", new Date(now - spans[range]).toISOString());
+    if (cursor) params.set("cursor", cursor);
+    if (limit) params.set("limit", String(limit));
+    return params.toString();
+  }
+
   /* ── App install & notifications ───────────────────────────────── */
 
   /** What the member can do to install the app: "installed" | "prompt" | "ios-steps" | "none". */
@@ -270,6 +382,11 @@
     timelineScale,
     buildQueue,
     groupByUser,
+    auditLabel,
+    auditWho,
+    auditDetails,
+    auditTarget,
+    auditQuery,
     installMode,
     pushState,
     urlBase64ToBytes,

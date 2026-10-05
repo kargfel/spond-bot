@@ -36,7 +36,11 @@ function createSite() {
     }
     let body = fs.readFileSync(file);
     if (rel === "sw.js") body = body + `\n// ${state.swNote}`;
-    return send(200, TYPES[path.extname(file)] || "application/octet-stream", body, { "cache-control": "no-cache" });
+    // Like production: the worker, its helper and the manifest must be revalidated, while other files
+    // carry only an old Last-Modified, which lets browsers cache them heuristically for hours or days.
+    const revalidate = ["sw.js", "sw-core.js", "manifest.webmanifest"].includes(rel);
+    return send(200, TYPES[path.extname(file)] || "application/octet-stream", body,
+      revalidate ? { "cache-control": "no-cache" } : { "last-modified": "Mon, 01 Sep 2025 08:00:00 GMT" });
   });
   let port = 0;
   return {
@@ -75,10 +79,10 @@ test.describe("service worker", () => {
   test("keeps the offline page, its icons and every font in the cache", async ({ page }) => {
     await controlled(page);
     const urls = await page.evaluate(async () => {
-      const cache = await caches.open("spondbot-v1");
+      const cache = await caches.open("spondbot-v3");
       return (await cache.keys()).map((r) => new URL(r.url).pathname);
     });
-    expect(urls).toEqual(expect.arrayContaining(["/offline.html", "/icons/logo.png", "/icons/icon-192.png", "/fonts/fonts.css"]));
+    expect(urls).toEqual(expect.arrayContaining(["/offline.html", "/offline.js", "/icons/logo.png", "/icons/icon-192.png", "/fonts/fonts.css"]));
     expect(urls.filter((u) => u.endsWith(".woff2")).length).toBeGreaterThanOrEqual(9);
   });
 
@@ -104,6 +108,16 @@ test.describe("service worker", () => {
     await expect(page.getByText("Answers you already set are safe.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Try again" })).toBeEnabled();
     await expect(page.getByRole("img", { name: "SpondBot" })).toBeVisible();
+  });
+
+  test("a page the browser still holds in its HTTP cache does not hide that the server is gone", async ({ page }) => {
+    await controlled(page);
+    await page.goto(site.url + "/dashboard"); // visited while online: now sits in the HTTP cache with an old Last-Modified
+    await page.waitForLoadState("networkidle");
+    await site.stop();
+    await page.goto(site.url + "/dashboard");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("pulled");
+    await expect(page.getByRole("status")).toContainText("Waiting for a connection");
   });
 
   test("the offline page loads nothing from the network", async ({ page }) => {

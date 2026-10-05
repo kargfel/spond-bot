@@ -342,3 +342,75 @@ describe("urlBase64ToBytes", () => {
     assert.equal(bytes[0], 4);
   });
 });
+
+describe("audit helpers", () => {
+  const entry = (o) => ({ actor_type: "user", actor_username: "felix", action: "event.choice_set", details: null, target_label: null, target_type: null, target_id: null, ...o });
+
+  test("known actions read like sentences, unlisted writes name the method", () => {
+    assert.equal(Core.auditLabel("auth.login.failed"), "Failed sign-in");
+    assert.equal(Core.auditLabel("rsvp.sent"), "Answer sent");
+    assert.equal(Core.auditLabel("http.delete"), "DELETE request");
+    assert.equal(Core.auditLabel("something.new"), "something.new");
+    assert.equal(Core.auditLabel(undefined), "Unknown");
+  });
+
+  test("who: the login, the bot, or nobody", () => {
+    assert.equal(Core.auditWho(entry({})), "felix");
+    assert.equal(Core.auditWho(entry({ actor_type: "system", actor_username: null })), "SpondBot");
+    assert.equal(Core.auditWho(entry({ actor_type: "anonymous", actor_username: null })), "Not signed in");
+    assert.equal(Core.auditWho(entry({ actor_type: "user", actor_username: null })), "Not signed in");
+  });
+
+  test("answer changes read as before → after in the member's own words", () => {
+    assert.equal(Core.auditDetails(entry({ details: { from: "manual", to: "accept", owner_user_id: "u1" } })), "Leave to me → Going");
+    assert.equal(Core.auditDetails(entry({ details: { from: "accept", to: "decline" } })), "Going → Not going");
+  });
+
+  test("answers the bot sent read like the old answer log", () => {
+    const sent = (d) => entry({ action: "rsvp.sent", actor_type: "system", details: d });
+    assert.equal(Core.auditDetails(sent({ member: "Mara Lind", choice: "accept", latency_ms: 41 })), "Mara Lind · Going · 41 ms after opening");
+    assert.equal(Core.auditDetails(sent({ member: "Mara Lind", choice: "decline", latency_ms: 112, retries: 1 })), "Mara Lind · Not going · 112 ms after opening · after 1 retry");
+    assert.equal(Core.auditDetails(sent({ choice: "accept", latency_ms: 90, retries: 3 })), "Going · 90 ms after opening · after 3 retries");
+    assert.equal(Core.auditDetails(sent({ choice: "accept", latency_ms: -12 })), "Going · 12 ms before opening");
+    assert.equal(Core.auditDetails(sent({ choice: "accept", latency_ms: 0 })), "Going · 0 ms after opening");
+    assert.equal(
+      Core.auditDetails(entry({ action: "rsvp.failed", details: { member: "Mara", choice: "accept", error: "403 member not found", latency_ms: null } })),
+      "Mara · Going · 403 member not found",
+    );
+  });
+
+  test("reasons and changes are summarised", () => {
+    assert.equal(Core.auditDetails(entry({ action: "auth.login.failed", details: { reason: "unknown_user" } })), "unknown user");
+    assert.equal(Core.auditDetails(entry({ action: "auth.login.failed", details: { reason: "something_new" } })), "something new");
+    assert.equal(
+      Core.auditDetails(entry({ action: "account.updated", details: { is_admin: { from: false, to: true }, password_reset: true } })),
+      "is admin: no → yes · password reset",
+    );
+    assert.equal(Core.auditDetails(entry({ action: "push.test_sent", details: { devices: 2, delivered: 1 } })), "devices: 2 · delivered: 1");
+  });
+
+  test("no details, odd details and empty values say nothing", () => {
+    assert.equal(Core.auditDetails(entry({ details: null })), "");
+    assert.equal(Core.auditDetails(entry({ details: "text" })), "");
+    assert.equal(Core.auditDetails(entry({ action: "x.y", details: { a: null, b: false, c: "" } })), "");
+  });
+
+  test("targets show what was touched", () => {
+    assert.equal(Core.auditTarget(entry({ target_type: "event", target_label: "Training, Hall B" })), "Training, Hall B");
+    assert.equal(Core.auditTarget(entry({ target_type: "spond_account", target_label: "Felix Karg" })), "spond account Felix Karg");
+    assert.equal(Core.auditTarget(entry({ target_type: "login", target_label: "mara" })), "login mara");
+    assert.equal(Core.auditTarget(entry({ target_type: "event", target_id: "123e4567-e89b-12d3" })), "123e4567");
+    assert.equal(Core.auditTarget(entry({})), "");
+  });
+
+  test("filters become a query string, leaving out what is empty", () => {
+    const now = Date.parse("2026-10-05T12:00:00Z");
+    assert.equal(Core.auditQuery({}, now), "");
+    assert.equal(Core.auditQuery({ q: "  felix ", category: "auth", outcome: "denied", range: "", cursor: "", limit: 50 }, now),
+      "q=felix&category=auth&outcome=denied&limit=50");
+    assert.equal(Core.auditQuery({ range: "24h" }, now), "since=2026-10-04T12%3A00%3A00.000Z");
+    assert.equal(Core.auditQuery({ range: "7d" }, now), "since=2026-09-28T12%3A00%3A00.000Z");
+    assert.equal(Core.auditQuery({ range: "all" }, now), "");
+    assert.equal(Core.auditQuery({ cursor: "2026-10-05T11:00:00|abc" }, now), "cursor=2026-10-05T11%3A00%3A00%7Cabc");
+  });
+});

@@ -11,6 +11,7 @@ is notified when SpondBot answers an event for the Spond account linked to that 
 """
 import logging
 import uuid
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlalchemy import delete, select
@@ -26,6 +27,7 @@ from app.schemas.push import (
     PushTestResponse,
     PushUnsubscribeRequest,
 )
+from app.services import audit
 from app.services import push as push_service
 
 logger = logging.getLogger(__name__)
@@ -96,6 +98,8 @@ async def subscribe(
     if len(mine) > push_service.MAX_DEVICES_PER_LOGIN:
         await db.execute(delete(PushSubscription).where(PushSubscription.id.in_(mine[push_service.MAX_DEVICES_PER_LOGIN:])))
         await db.commit()
+    audit.record("push.subscribed", target_type="device", target_label=urlparse(payload.endpoint).hostname,
+                 details={"devices": min(len(mine), push_service.MAX_DEVICES_PER_LOGIN)})
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -114,6 +118,7 @@ async def unsubscribe(
         )
     )
     await db.commit()
+    audit.record("push.unsubscribed", target_type="device", target_label=urlparse(payload.endpoint).hostname)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -129,4 +134,6 @@ async def send_test(
     devices, delivered = await push_service.send_to_login(db, login_id, push_service.build_test_payload())
     if devices == 0:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No device is subscribed. Turn notifications on first.")
+    audit.record("push.test_sent", outcome="success" if delivered else "failed",
+                 details={"devices": devices, "delivered": delivered})
     return PushTestResponse(devices=devices, delivered=delivered)

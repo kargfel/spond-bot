@@ -10,6 +10,9 @@
 # pg_restore (see docs/setup.md). Old dumps are only pruned after a successful
 # backup, so a run of failures never deletes the last good copy.
 set -u
+# Dumps hold every member's encrypted Spond credentials and the password hashes:
+# readable by the owner only, whatever the host's default umask is.
+umask 077
 
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-14}"

@@ -22,6 +22,7 @@ from sqlalchemy import select
 from app.api import accounts as accounts_router
 from app.api.deps import AdminDep
 from app.api import admin as admin_router
+from app.api import audit as audit_router
 from app.api import auth as auth_router
 from app.api import stream as stream_router
 from app.api import events as events_router
@@ -30,6 +31,8 @@ from app.api import push as push_router
 from app.api import users as users_router
 from app.config import settings
 from app.core.security import hash_password
+from app.core.security_headers import BodyLimitMiddleware, SecurityHeadersMiddleware
+from app.services.audit import AuditMiddleware
 from app.workers.scheduler import reschedule_pending_snipers, shutdown_scheduler, start_scheduler
 
 logging.basicConfig(
@@ -40,6 +43,19 @@ logger = logging.getLogger(__name__)
 
 # Resolved path to the frontend directory — used for sandboxed file serving
 _FRONTEND_DIR = Path("frontend").resolve()
+
+
+_UNSAFE_ADMIN_PASSWORDS = {"changeme", "changeme_admin_password", "password", "admin", "admin123", "12345678"}
+
+
+def assert_admin_password_is_safe(password: str) -> None:
+    """Refuse to create the first admin with a password from the example file or a trivially short one."""
+    if len(password) < 10 or password.lower() in _UNSAFE_ADMIN_PASSWORDS:
+        raise RuntimeError(
+            "ADMIN_PASSWORD is empty, too short (under 10 characters) or still an example value. "
+            "Set a strong ADMIN_PASSWORD in .env before the first start: the admin account is created "
+            "from it, and anyone who knows the example password could sign in as admin."
+        )
 
 
 async def _seed_admin() -> None:
@@ -58,6 +74,7 @@ async def _seed_admin() -> None:
             logger.info("Admin account already exists — skipping seed.")
             return
 
+        assert_admin_password_is_safe(settings.admin_password)
         admin = FrontendUser(
             id=uuid.uuid4(),
             username=settings.admin_username,
@@ -74,9 +91,36 @@ async def _seed_admin() -> None:
         break
 
 
+def warn_if_proxies_untrusted(trusted_proxies: str, site_domain: str) -> bool:
+    """
+    A public site sits behind a reverse proxy, and the visitor's IP only reaches the app in
+    X-Forwarded-For. Two settings are wrong there. Unset: only 127.0.0.1 is believed, so every
+    visitor looks like the proxy (the audit log shows one IP, all members share one login limit).
+    "*": everyone is believed, so a visitor can fake their IP. Returns True when it warned.
+    """
+    value = trusted_proxies.strip()
+    if site_domain == "localhost" or value not in ("", "*"):
+        return False
+    if value == "*":
+        logger.warning(
+            "TRUSTED_PROXIES=* trusts every sender, so any visitor can fake their IP address "
+            "(X-Forwarded-For): the audit log can be lied to and the login rate limit dodged. "
+            "Set TRUSTED_PROXIES in .env to your reverse proxy's IP or network."
+        )
+    else:
+        logger.warning(
+            "TRUSTED_PROXIES is not set, so only 127.0.0.1 is trusted: behind a reverse proxy every "
+            "visitor looks like the proxy (one IP in the audit log, one shared login rate limit). "
+            "Set TRUSTED_PROXIES in .env to your reverse proxy's IP or network, e.g. "
+            "TRUSTED_PROXIES=172.18.0.5 (docs/setup.md)."
+        )
+    return True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Spond Multi-User Bot...")
+    warn_if_proxies_untrusted(settings.trusted_proxies, settings.site_domain)
     await _seed_admin()
     start_scheduler()
     await reschedule_pending_snipers()
@@ -102,11 +146,20 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url=None,
     redoc_url=None,
+    openapi_url=None,  # served below, behind the admin login
 )
 
 # Register slowapi state and its 429 exception handler
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Middleware, innermost first (each add_middleware wraps everything added before it):
+#   body limit   refuses oversized bodies
+#   audit        so refusals (413, 401, 403, 429) are recorded too
+#   security     every response, including refusals and errors, gets the security headers
+app.add_middleware(BodyLimitMiddleware)
+app.add_middleware(AuditMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 # CORS is intentionally omitted — the frontend is served from the same origin.
 
@@ -119,39 +172,49 @@ app.include_router(admin_router.router, prefix="/api/v1")
 app.include_router(stream_router.router, prefix="/api/v1")
 app.include_router(invites_router.router, prefix="/api/v1")
 app.include_router(push_router.router, prefix="/api/v1")
+app.include_router(audit_router.router, prefix="/api/v1")
 
 # ── Frontend Serving ────────────────────────────────────────────────
+
+
+# HTML carries no version in its URL, so a browser must ask on every use (a cheap 304 when
+# unchanged). Without this, browsers cache pages heuristically for hours or days: members see
+# stale pages after a deploy, the ?v= on scripts never takes effect, and the service worker never
+# notices that the server is gone because the "network" answer comes from the HTTP cache.
+_REVALIDATE = {"Cache-Control": "no-cache"}
+
+
+def _page(name: str) -> FileResponse:
+    return FileResponse(_FRONTEND_DIR / name, headers=_REVALIDATE)
 
 
 @app.get("/")
 @app.get("/login")
 @app.get("/index.html")
 async def serve_index():
-    return FileResponse(_FRONTEND_DIR / "index.html")
+    return _page("index.html")
 
 
 @app.get("/dashboard")
 @app.get("/dashboard.html")
 async def serve_dashboard():
-    return FileResponse(_FRONTEND_DIR / "dashboard.html")
+    return _page("dashboard.html")
 
 
 @app.get("/admin")
 @app.get("/admin.html")
 async def serve_admin():
-    return FileResponse(_FRONTEND_DIR / "admin.html")
+    return _page("admin.html")
 
 
 @app.get("/join")
 @app.get("/join.html")
 async def serve_join():
-    return FileResponse(_FRONTEND_DIR / "join.html")
+    return _page("join.html")
 
 
-# PWA files that browsers must revalidate on every use: a stale service worker or manifest
-# would pin members to an old version. The worker also has to sit at the root so its scope
-# covers the whole app.
-_REVALIDATE = {"Cache-Control": "no-cache"}
+# PWA files get the same treatment: a stale service worker or manifest would pin members to an
+# old version. The worker also has to sit at the root so its scope covers the whole app.
 
 
 @app.get("/sw.js", include_in_schema=False)
@@ -169,6 +232,11 @@ async def serve_manifest():
     return FileResponse(
         _FRONTEND_DIR / "manifest.webmanifest", media_type="application/manifest+json", headers=_REVALIDATE
     )
+
+
+@app.get("/openapi.json", include_in_schema=False)
+async def protected_openapi(current_user: dict = AdminDep):
+    return JSONResponse(app.openapi())
 
 
 @app.get("/docs", include_in_schema=False)
@@ -201,5 +269,5 @@ _ASSETS: dict[str, Path] = (
 async def catch_all(path: str):
     asset = _ASSETS.get(path)
     if asset is None:
-        return FileResponse(_FRONTEND_DIR / "index.html")
-    return FileResponse(asset)
+        return _page("index.html")
+    return FileResponse(asset, headers=_REVALIDATE if asset.suffix == ".html" else None)

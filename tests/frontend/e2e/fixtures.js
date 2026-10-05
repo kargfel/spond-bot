@@ -31,6 +31,57 @@ function event(id, user_id, heading, start, invite, user_choice, status, error_m
   };
 }
 
+function auditEntry(id, minutesAgo, action, o = {}) {
+  return {
+    id, occurred_at: iso(NOW - minutesAgo * 60e3), actor_type: "user", actor_id: "a1", actor_username: "felix",
+    actor_is_admin: false, action, category: action.split(".")[0], outcome: "success", target_type: null,
+    target_id: null, target_label: null, details: null, ip: "198.51.100.1", user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4)",
+    method: "POST", path: "/api/v1/x", status_code: 200, request_id: `req-${id}`, ...o,
+  };
+}
+
+/** Newest first, like the server returns them. */
+function defaultAudit() {
+  return [
+    auditEntry("l1", 2, "auth.login.success", { target_type: "login", target_label: "felix", path: "/api/v1/auth/login", status_code: 204 }),
+    auditEntry("l2", 5, "event.choice_set", {
+      method: "PATCH", path: "/api/v1/events/e2", target_type: "event", target_id: "e2", target_label: "League match vs. TSV Nord",
+      details: { from: "manual", to: "accept", owner_user_id: "u1", status: "pending" },
+    }),
+    auditEntry("l3", 9, "auth.login.failed", {
+      actor_type: "anonymous", actor_id: null, actor_username: null, actor_is_admin: null, outcome: "denied", status_code: 401,
+      ip: "192.0.2.99", target_type: "login", target_label: "admin", path: "/api/v1/auth/login", details: { reason: "wrong_password" },
+    }),
+    auditEntry("l4", 30, "rsvp.sent", {
+      actor_type: "system", actor_id: null, actor_username: null, actor_is_admin: null, ip: null, user_agent: null, method: null,
+      path: null, status_code: null, request_id: null, target_type: "event", target_label: "Training, Hall B",
+      details: { choice: "accept", member: "Felix Karg", spond_user_id: "u1", spond_event_id: "sp-e1", latency_ms: 41 },
+    }),
+    auditEntry("l8", 45, "rsvp.failed", {
+      actor_type: "system", actor_id: null, actor_username: null, actor_is_admin: null, ip: null, user_agent: null, method: null,
+      path: null, status_code: null, request_id: null, outcome: "failed", target_type: "event", target_label: "Autumn tournament",
+      details: { choice: "decline", member: "Mara Lind", spond_user_id: "u2", retries: 1, error: "Retry failed: 403 member not found" },
+    }),
+    auditEntry("l5", 180, "account.created", {
+      actor_id: "a2", actor_username: "admin", actor_is_admin: true, target_type: "login", target_label: "mara", status_code: 201,
+      details: { is_admin: false, linked_user_id: null },
+    }),
+    auditEntry("l6", 60 * 24 * 2, "http.get", { outcome: "denied", status_code: 403, method: "GET", path: "/api/v1/admin/stats" }),
+    auditEntry("l7", 60 * 24 * 20, "invite.created", {
+      actor_id: "a2", actor_username: "admin", actor_is_admin: true, target_type: "invite", target_label: "Jonas", details: { days_valid: 7 },
+    }),
+  ];
+}
+
+function filterAudit(all, q) {
+  const text = (q.get("q") || "").toLowerCase();
+  return all.filter((e) =>
+    (!text || [e.action, e.actor_username, e.target_label, e.ip, e.path, e.details && JSON.stringify(e.details)].some((v) => (v || "").toLowerCase().includes(text))) &&
+    (!q.get("category") || e.category === q.get("category")) &&
+    (!q.get("outcome") || e.outcome === q.get("outcome")) &&
+    (!q.get("since") || Date.parse(e.occurred_at) >= Date.parse(q.get("since"))));
+}
+
 function defaultState() {
   return {
     me: { sub: "a1", username: "felix", is_admin: false, linked_user_id: "u1" },
@@ -82,6 +133,7 @@ function defaultState() {
       { id: "i2", token: "valid-token", note: "Mara", created_at: iso(NOW - H), expires_at: iso(NOW + 7 * D), used_at: null },
       { id: "i3", token: "old-token", note: null, created_at: iso(NOW - 10 * D), expires_at: iso(NOW - 3 * D), used_at: null },
     ],
+    audit: defaultAudit(),
     push: { enabled: true, subscriptions: [], delivered: null, testStatus: 200, subscribeStatus: 204 },
     charts: {
       latency_scatter: [
@@ -313,6 +365,19 @@ class MockApi {
     // Everything below is admin only
     if (!me.is_admin) return json(403, { detail: "Admin privileges required." });
 
+    if (method === "GET" && p === "/admin/audit") {
+      const q = url.searchParams;
+      const list = filterAudit(s.audit, q);
+      const limit = Number(q.get("limit") || 100);
+      const start = Number(q.get("cursor") || 0); // the mock's cursor is simply an offset
+      return json(200, { items: list.slice(start, start + limit), next_cursor: start + limit < list.length ? String(start + limit) : null });
+    }
+    if (method === "GET" && p === "/admin/audit/export.csv") {
+      const rows = filterAudit(s.audit, url.searchParams);
+      const body = ["occurred_at,actor_username,action,outcome", ...rows.map((e) => `${e.occurred_at},${e.actor_username || ""},${e.action},${e.outcome}`)].join("\n");
+      return route.fulfill({ status: 200, body, headers: { "content-type": "text/csv", "content-disposition": 'attachment; filename="spondbot-audit.csv"' } });
+    }
+
     if (p === "/accounts") {
       if (method === "GET") return json(200, s.accounts);
       if (method === "POST") {
@@ -446,4 +511,4 @@ const test = base.extend({
   },
 });
 
-module.exports = { test, expect, NOW, installFakePush };
+module.exports = { test, expect, NOW, installFakePush, auditEntry };

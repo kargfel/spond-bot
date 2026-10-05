@@ -1,7 +1,7 @@
 /**
  * Admin panel.
  *
- * Views (hash routed: #queue, #timeline, #users, #log, #charts):
+ * Views (hash routed: #queue, #timeline, #users, #audit, #charts; the old #log opens #audit filtered to answers):
  *  - Queue     next-fire countdown, health counters, every account's events
  *              ordered by fire time with answer toggles, send-now / disarm / retry
  *  - Timeline  one lane per Spond account: registration opening -> event start
@@ -15,7 +15,8 @@
   const L = Core.CHOICE_LABELS;
   const SHORT = { accept: "ACC", decline: "DEC", manual: "MAN" };
   const CHOICES = ["accept", "decline", "manual"];
-  const VIEWS = ["queue", "timeline", "users", "log", "charts"];
+  const VIEWS = ["queue", "timeline", "users", "audit", "charts"];
+  const AUDIT_PAGE = 100;
   const DAY = 24 * 3600e3;
 
   const state = {
@@ -31,6 +32,7 @@
     editingLogin: null,
     passwordFor: null,
     charts: {},
+    audit: { items: [], cursor: null, open: new Set(), seq: 0 },
   };
 
   const $ = (id) => document.getElementById(id);
@@ -73,7 +75,7 @@
   }
 
   function fillAccountSelects() {
-    for (const id of ["q-account", "log-account", "chart-account"]) {
+    for (const id of ["q-account", "chart-account"]) {
       const sel = $(id);
       const current = sel.value;
       sel.innerHTML = '<option value="">All accounts</option>' +
@@ -84,6 +86,12 @@
 
   /* ── Views ───────────────────────────────────────────────────────── */
   function showView(view) {
+    if (view === "log") {
+      // Old bookmark: the answer log now lives in the audit trail.
+      $("audit-category").value = "rsvp";
+      history.replaceState(null, "", "#audit");
+      view = "audit";
+    }
     if (!VIEWS.includes(view)) view = "queue";
     state.view = view;
     for (const v of VIEWS) $(`view-${v}`).hidden = v !== view;
@@ -94,7 +102,7 @@
     if (view === "queue") renderQueue();
     if (view === "timeline") renderTimeline();
     if (view === "users") loadUsersView();
-    if (view === "log") loadLog();
+    if (view === "audit") loadAudit();
     if (view === "charts") loadCharts();
   }
 
@@ -584,32 +592,84 @@
     }
   }
 
-  /* ── Log ─────────────────────────────────────────────────────────── */
-  async function loadLog() {
-    const account = $("log-account").value;
-    const rows = await guarded(() => apiJson(`/admin/rsvp-log?limit=200${account ? `&user_id=${encodeURIComponent(account)}` : ""}`));
-    if (!rows) return;
-    const outcome = $("log-outcome").value;
-    const shown = outcome ? rows.filter((r) => r.outcome === outcome) : rows;
-    const badge = { success: '<span class="badge badge-ok">succeeded</span>', retry_success: '<span class="badge badge-sig">after retry</span>' };
-    $("log-body").innerHTML = shown.length
-      ? shown.map((r) => {
-          const ev = eventById(r.event_id);
-          const latency = r.submitted_at && ev?.invite_time ? Date.parse(r.submitted_at) - Date.parse(ev.invite_time) : null;
-          return `
-            <tr>
-              <td class="mono nowrap">${esc(Core.formatStamp(r.fired_at))}</td>
-              <td>${esc(nameOf(r.user_id))}</td>
-              <td>${ev ? `<span class="t-strong">${esc(ev.heading || "Untitled event")}</span>` : `<span class="mono t-dim">${esc(r.spond_event_id.slice(0, 12))}</span>`}</td>
-              <td>${esc(L[r.choice] || r.choice)}</td>
-              <td>${badge[r.outcome] || '<span class="badge badge-bad">failed</span>'}</td>
-              <td class="num mono">${latency != null ? `${latency} ms` : "–"}</td>
-              <td class="num mono">${r.retry_count}</td>
-              <td>${r.error_detail ? `<span class="t-err">${esc(r.error_detail)}</span>` : ""}</td>
-            </tr>`;
-        }).join("")
-      : '<tr><td colspan="8" class="empty-note">No answers logged for these filters yet.</td></tr>';
+  /* ── Audit ───────────────────────────────────────────────────────── */
+  const auditFilters = () => ({
+    q: $("audit-q").value,
+    category: $("audit-category").value,
+    outcome: $("audit-outcome").value,
+    range: $("audit-range").value,
+  });
+
+  /** Loads the first page for the current filters, or the next page when `more` is set. */
+  async function loadAudit(more = false) {
+    const seq = ++state.audit.seq;
+    const query = Core.auditQuery({ ...auditFilters(), cursor: more ? state.audit.cursor : "", limit: AUDIT_PAGE });
+    const page = await guarded(() => apiJson(`/admin/audit?${query}`));
+    if (!page || seq !== state.audit.seq) return; // a newer filter change superseded this answer
+    state.audit.items = more ? state.audit.items.concat(page.items) : page.items;
+    state.audit.cursor = page.next_cursor;
+    renderAudit();
   }
+
+  const OUTCOME_BADGE = {
+    success: '<span class="badge badge-ok">ok</span>',
+    denied: '<span class="badge badge-sig">refused</span>',
+    failed: '<span class="badge badge-bad">failed</span>',
+  };
+
+  function auditDetailRow(e) {
+    const facts = [
+      ["Request", e.method ? `${e.method} ${e.path || ""}${e.status_code ? ` → ${e.status_code}` : ""}` : "by SpondBot itself"],
+      ["Target", [e.target_type, e.target_label, e.target_id].filter(Boolean).join(" · ")],
+      ["IP address", e.ip],
+      ["Browser", e.user_agent],
+      ["Request ID", e.request_id],
+      ["Account ID", e.actor_id],
+    ].filter(([, v]) => v);
+    return `
+      <tr class="audit-detail" id="audit-d-${esc(e.id)}"${state.audit.open.has(e.id) ? "" : " hidden"}>
+        <td colspan="6">
+          <dl class="audit-dl">${facts.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd class="mono">${esc(v)}</dd></div>`).join("")}</dl>
+          ${e.details ? `<pre class="audit-json">${esc(JSON.stringify(e.details, null, 2))}</pre>` : ""}
+        </td>
+      </tr>`;
+  }
+
+  function renderAudit() {
+    const items = state.audit.items;
+    $("audit-body").innerHTML = items.length
+      ? items.map((e) => {
+          const open = state.audit.open.has(e.id);
+          const summary = Core.auditDetails(e);
+          return `
+            <tr class="audit-row">
+              <td class="mono nowrap"><button type="button" class="row-toggle" data-audit="${esc(e.id)}" aria-expanded="${open}" aria-controls="audit-d-${esc(e.id)}">${esc(Core.formatStamp(e.occurred_at))}</button></td>
+              <td>${esc(Core.auditWho(e))}${e.actor_is_admin ? ' <span class="badge">admin</span>' : ""}</td>
+              <td><span class="t-strong">${esc(Core.auditLabel(e.action))}</span>${summary ? `<div class="t-dim audit-summary">${esc(summary)}</div>` : ""}</td>
+              <td>${esc(Core.auditTarget(e))}</td>
+              <td>${OUTCOME_BADGE[e.outcome] || esc(e.outcome)}</td>
+              <td class="mono t-dim">${esc(e.ip || "")}</td>
+            </tr>${auditDetailRow(e)}`;
+        }).join("")
+      : '<tr><td colspan="6" class="empty-note">Nothing recorded for these filters.</td></tr>';
+    $("audit-more").hidden = !state.audit.cursor;
+  }
+
+  function toggleAuditRow(id) {
+    const open = !state.audit.open.has(id);
+    if (open) state.audit.open.add(id);
+    else state.audit.open.delete(id);
+    const row = $(`audit-d-${id}`);
+    if (row) row.hidden = !open;
+    document.querySelector(`[data-audit="${CSS.escape(id)}"]`)?.setAttribute("aria-expanded", String(open));
+  }
+
+  function exportAudit() {
+    // A plain navigation: the session cookie authorises it and the server answers with a download.
+    window.location.href = `${BASE_URL}/admin/audit/export.csv?${Core.auditQuery(auditFilters())}`;
+  }
+
+  let auditSearchTimer = null;
 
   /* ── Charts ──────────────────────────────────────────────────────── */
   async function loadCharts() {
@@ -738,7 +798,13 @@
 
     for (const id of ["q-account", "q-state", "q-past"]) $(id).addEventListener("change", renderQueue);
     $("q-search").addEventListener("input", renderQueue);
-    for (const id of ["log-account", "log-outcome"]) $(id).addEventListener("change", loadLog);
+    for (const id of ["audit-category", "audit-outcome", "audit-range"]) $(id).addEventListener("change", () => loadAudit());
+    $("audit-q").addEventListener("input", () => {
+      clearTimeout(auditSearchTimer);
+      auditSearchTimer = setTimeout(() => loadAudit(), 300);
+    });
+    $("audit-more").addEventListener("click", () => loadAudit(true));
+    $("audit-export").addEventListener("click", exportAudit);
     for (const id of ["chart-days", "chart-account"]) $(id).addEventListener("change", loadCharts);
 
     $("add-login-btn").addEventListener("click", () => openLoginDialog(null));
@@ -767,6 +833,7 @@
       if ((el = t("[data-delete-spond]"))) return deleteSpond(el.dataset.deleteSpond);
       if ((el = t("[data-spond-password]"))) return openSpondPasswordDialog(el.dataset.spondPassword);
       if ((el = t("[data-revoke-invite]"))) return revokeInvite(el.dataset.revokeInvite);
+      if ((el = t("[data-audit]"))) return toggleAuditRow(el.dataset.audit);
     });
     document.querySelector(".main").addEventListener("change", (e) => {
       const sw = e.target.closest("[data-active]");
@@ -793,7 +860,7 @@
         toast(`Answer ${d.outcome === "success" ? "sent" : "failed"}: ${d.heading} (${L[d.choice] || d.choice})`, d.outcome === "success" ? "success" : "error");
         refreshQueue();
         loadStats();
-        if (state.view === "log") loadLog();
+        if (state.view === "audit" && state.audit.items.length <= AUDIT_PAGE) loadAudit();
       },
       discovery_completed: () => { refreshQueue(); loadStats(); },
       scheduler_changed: () => loadJobs().then(() => { if (state.view === "queue") renderQueue(); }),

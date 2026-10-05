@@ -53,10 +53,12 @@ app/
     rsvp_log.py            Audit log of every RSVP attempt
     invite.py              Single-use invite link (token stored as SHA-256 hash)
     push_subscription.py   One browser/device that gets Web Push (belongs to a dashboard login)
+    audit_log.py           Append-only audit trail row (who/what/target/outcome/IP, no FKs)
   services/
     auth.py                ensure_fresh_token() — token lifecycle
     spond_accounts.py      Verify Spond credentials + build encrypted User row
     push.py                Web Push: VAPID key, payloads, sending, expired-subscription cleanup
+    audit.py               Audit trail: record()/record_system(), AuditMiddleware, scrubbing, nightly purge
   workers/
     discovery.py           Worker A: sync events from Spond for all users
     executioner.py         Worker B: fire RSVPs + sniper DateTrigger helpers
@@ -67,6 +69,7 @@ app/
     users.py               /spond-accounts/* (Spond account CRUD; POST /me = connect own account; PUT /{id}/password)
     invites.py             /invites/* (admin create/list/revoke; public check/accept)
     push.py                /push/* (config, subscribe, unsubscribe, test) for the signed-in login
+    audit.py               /admin/audit (filters, cursor paging) and /admin/audit/export.csv
     events.py              /events/* (list, set decision) and /health
     admin.py               /admin/* (stats, charts, RSVP log, scheduler jobs, sync)
     stream.py              /admin/stream and /user/stream (SSE)
@@ -115,6 +118,26 @@ Frontend changes are test-driven. `npm install` once, then:
 
 Member-facing labels: `accept`/`decline`/`manual` are shown as Going / Not going / Leave to me.
 
+## Security conventions
+
+- **Sessions are checked against the database** on every request (`deps._get_current_user`): never trust `is_admin`/`linked_user_id` from the cookie. It uses its own short session (`deps.open_session`), never `Depends(get_db)`, because SSE streams stay open for hours and would pin a pool connection. Session cookies carry `pwv` (password fingerprint): any password change must re-issue the cookie of the person changing it (`set_session_cookie`).
+- **CSP forbids inline scripts**: no `<script>` without `src`, no `onclick=` etc. (tests enforce it). Put behaviour in a `.js` file and add the file to the page. Remote scripts need `integrity=` and `crossorigin`.
+- **HTML is `Cache-Control: no-cache`** (no version in its URL). Keep new page routes on `_page()`. The service worker fetches navigations with `cache: "no-cache"` for the same reason.
+- User-controlled text in `innerHTML` must go through `esc()`; `tests/frontend/e2e/xss.spec.js` plants markup in every view, add new views there.
+- New endpoints: decide who may call them (`CurrentUser` / `AdminDep`), check ownership for member routes, rate-limit anything that verifies a secret, and add an `audit.record()` call.
+- Passwords: `hash_password`/`verify_password` cut at 72 *bytes*; do not hash `plain[:72]` yourself.
+- `docs/security.md` lists protections, operator duties and known open items: update it when you change any of them.
+
+## Audit trail
+
+- Every action that changes something calls `audit.record("area.action", target_type=…, target_id=…, target_label=…, details=…)` **after the commit** (staged on the request, written after the response). Name actions `area.verb`; the area is the filter category. New endpoints that write need a `record()` call; without one the middleware still logs a generic `http.<method>` row, but with no meaning.
+- The bot's own actions use `await audit.record_system(...)`. Answers sent/failed are `rsvp.sent`/`rsvp.failed` with member, choice, latency_ms, retries and error: the admin panel has no separate answer-log view, the Audit view (area *Answers sent*) is it. `rsvp_log` stays for stats/charts. `record()` outside a request does nothing.
+- Never put secrets in `details` (the scrubber is a safety net, not a licence). Use whitelisted fields and before/after values only.
+- Successful GETs are deliberately not logged. Reading the trail is not logged; exporting it is.
+- Frontend labels live in `Core.auditLabel` (`frontend/core.js`): add a label when you add an action.
+- Tests: `AUDIT_ENABLED=false` by default (tests/conftest.py); opt in with the `audit_on` fixture and use `tests/audit_helpers.py` (real login cookies, no auth overrides, so the middleware sees the actor).
+- IPs come from uvicorn's `--forwarded-allow-ips` (`TRUSTED_PROXIES` from `.env`; default `127.0.0.1`, never `*`: tests forbid a wildcard default). Behind a proxy the operator must set it (docs/setup.md).
+
 ## PWA and Web Push
 
 - The app is installable (`manifest.webmanifest`, `sw.js` at the root). Page loads go network-first with `offline.html` as fallback; static files are stale-while-revalidate (**bump `?v=` on changed assets**); `/api/` is never cached. A new service worker waits until the member clicks Reload in the banner.
@@ -144,7 +167,7 @@ At invite_time:
 
 ## Configuration (env vars)
 
-See `docs/setup.md` for the full reference. Critical vars: `DATABASE_URL`, `FERNET_KEY`, `API_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `RSVP_LEAD_TIME_MS`. Optional: `VAPID_PRIVATE_KEY` (Web Push).
+See `docs/setup.md` for the full reference. Critical vars: `DATABASE_URL`, `FERNET_KEY`, `API_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `RSVP_LEAD_TIME_MS`. Optional: `VAPID_PRIVATE_KEY` (Web Push), `TRUSTED_PROXIES`, `AUDIT_RETENTION_DAYS`.
 
 ## Further Reading
 

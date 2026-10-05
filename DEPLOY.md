@@ -17,7 +17,7 @@ Because SpondBot will be running on a dedicated `mainApps` VM while Traefik runs
 **Security Checklist:**
 - The Docker container on `mainApps` will expose port 8080 to the VM's network interface (not `127.0.0.1`).
 - You **must** configure a firewall (e.g., `ufw`) on the `mainApps` VM to allow TCP inbound on port 8080 **only** from the `jumpHost`'s internal IP address.
-- The `Dockerfile` has been configured with `--proxy-headers --forwarded-allow-ips='*'` so that the internal rate limiter correctly reads the client IP passed down by Traefik. Keep this restricted on the firewall to prevent IP spoofing from other machines on your LAN.
+- The app reads the visitor's IP from the `X-Forwarded-For` header Traefik sends, and only believes it from the addresses in `TRUSTED_PROXIES`. Set it in `.env` to the **jumpHost's internal IP** (e.g. `TRUSTED_PROXIES=10.0.0.5`). Without it every visitor looks like the jumpHost: one IP in the audit log and one shared login rate limit for all members; with `*` anyone can fake their IP. It is the same IP your firewall rule for port 8080 allows (`sudo ufw status | grep 8080`). See `docs/setup.md`.
 
 ---
 
@@ -64,7 +64,8 @@ Fill in `.env` with your actual values:
 | `SITE_DOMAIN` | `spond.yourdomain.com` |
 | `APP_PORT` | `8080` |
 | `ADMIN_USERNAME` | Your desired admin username |
-| `ADMIN_PASSWORD` | A strong unique password |
+| `ADMIN_PASSWORD` | A strong unique password (at least 10 characters). The app refuses to start the first time with an example value like `changeme` |
+| `TRUSTED_PROXIES` | The jumpHost's internal IP (see section 1) |
 
 Build and start the stack:
 

@@ -24,7 +24,8 @@ ALGORITHM = "HS256"
 # Derive a stable secret from the Fernet key (first 43 chars = 256 bits)
 _SECRET = settings.fernet_key[:43]
 _KEY = OctKey.import_key(_SECRET.encode("utf-8"))
-_REGISTRY = jwt.JWTClaimsRegistry()
+# A token without an expiry would never end, so `exp` is required, not just checked when present.
+_REGISTRY = jwt.JWTClaimsRegistry(exp={"essential": True})
 
 
 def create_access_token(data: dict) -> str:

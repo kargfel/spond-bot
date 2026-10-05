@@ -58,6 +58,9 @@ TZ=Europe/Berlin
 | `TZ` | `Europe/Berlin` | Scheduler and log timezone |
 | `VAPID_PRIVATE_KEY` | empty (push off) | Signs Web Push notifications. Generate with `python scripts/generate_vapid_key.py`. Keep it: a new key invalidates every device's notification subscription |
 | `VAPID_SUBJECT` | `https://<SITE_DOMAIN>` | Contact URL (`https:` or `mailto:`) that push services can use to reach you |
+| `AUDIT_RETENTION_DAYS` | `90` | Audit entries older than this are deleted every night (03:17). IP addresses are personal data, so keep it short |
+| `AUDIT_ENABLED` | `true` | Set to `false` to switch the audit trail off completely |
+| `TRUSTED_PROXIES` | `127.0.0.1` | Comma-separated IPs or CIDRs of your reverse proxy: the only peers whose `X-Forwarded-For` is believed. **Set this** when running behind a proxy: [Set TRUSTED_PROXIES](#set-trusted_proxies) |
 | `BACKUP_DIR` | `./backups` | Host folder for database dumps (compose `backup` service) |
 | `BACKUP_INTERVAL_HOURS` | `24` | Time between backups |
 | `BACKUP_KEEP_DAYS` | `14` | Dumps older than this are deleted after a successful backup |
@@ -138,6 +141,36 @@ Notes:
 - Supported push services: Chrome and other Chromium browsers (FCM), Firefox, Safari. The server only sends to those hosts.
 - Signing out on a device turns its notifications off.
 - Only logins linked to a Spond account get answer notifications.
+
+---
+
+## Audit trail
+
+Admin panel → **Audit** shows who did what, when and from where: sign-ins (including failed ones, with the name that was tried), every change to logins, Spond accounts, invites and answers (with before → after), refusals (403, rate limits), notification changes, and what the bot itself did: **every answer it sent or failed to send** (member, answer, latency from registration opening, retries, error) and sync runs. The former *Log* view is part of this; answers from the last 90 days were copied over when you upgraded. The underlying `rsvp_log` table is kept for statistics and charts. Each entry has IP address, browser, request path, status code and a request ID (also sent back as the `X-Request-ID` response header, so a support question can be traced). Filter by text, area, result and period; **Export CSV** downloads what the filters show.
+
+- **Not recorded:** successful reads (dashboard polling would drown everything), passwords, tokens and Spond credentials. Invite tokens and notification endpoints are never stored either.
+- **Retention:** entries older than `AUDIT_RETENTION_DAYS` (default 90) are removed every night. The trail is append-only from the app's point of view: there is no way to edit or delete entries in the UI.
+- **Privacy:** IP addresses and browser strings are personal data. Tell your members that sign-ins and changes are logged, and keep the retention short.
+
+### Set TRUSTED_PROXIES
+
+Behind a reverse proxy the app learns a visitor's IP only from the `X-Forwarded-For` header the proxy adds. `TRUSTED_PROXIES` says whose header to believe:
+
+| Setting | Result |
+|---|---|
+| your proxy's IP (or network) | **right**: the real visitor IP is recorded and cannot be faked |
+| not set (default) | only `127.0.0.1` is believed: every visitor looks like the proxy, so the audit log shows one IP and all members share **one** login rate limit |
+| `*` | everyone is believed: a visitor can fake their IP and dodge the login limit |
+
+Write it into `.env` (no quotes); Docker Compose passes that file to the container:
+
+```env
+TRUSTED_PROXIES=10.0.0.5            # one proxy
+TRUSTED_PROXIES=172.18.0.0/16       # or a whole network; several: comma-separated
+```
+
+The address to use is the one the app sees the proxy connect from. With the Traefik setup in `DEPLOY.md` that is the jumpHost's internal IP, the same one your firewall rule for port 8080 allows (`sudo ufw status | grep 8080`). After a deploy, sign in and check the IP column in **Audit**: it must show your own address, not the proxy's. The app logs a warning at startup while the setting is unset or `*` on a public domain.
+
 
 ---
 
@@ -239,6 +272,8 @@ docker compose start app backup
 ```
 
 Use the same `FERNET_KEY` as when the backup was taken. On start the app runs any newer migrations automatically.
+
+Dumps are readable by their owner only (root, because the backup container writes them), since they hold every member's encrypted Spond credentials and the password hashes. Read them with `sudo`, e.g. `sudo sh -c 'docker compose exec -T db pg_restore --clean --if-exists --no-owner -U spond -d spond_bot < backups/….dump'`. Dumps made before this was introduced keep their old permissions: run `sudo chmod 600 backups/*.dump` once.
 
 ---
 
