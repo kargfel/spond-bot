@@ -134,7 +134,21 @@ def spond_api():
 
 
 @pytest.fixture
-def audit_on(monkeypatch, test_db):
+def real_sessions(monkeypatch, test_db):
+    """Let real session cookies be checked against the test database (see deps._get_current_user)."""
+    from contextlib import asynccontextmanager
+
+    from app.api import deps
+
+    @asynccontextmanager
+    async def session():
+        yield test_db
+
+    monkeypatch.setattr(deps, "open_session", session)
+
+
+@pytest.fixture
+def audit_on(monkeypatch, test_db, real_sessions):
     """Turn the audit trail on and write its rows into the test database."""
     from contextlib import asynccontextmanager
 

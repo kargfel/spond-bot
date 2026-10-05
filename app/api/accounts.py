@@ -10,7 +10,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminDep, DbDep
@@ -21,6 +21,13 @@ from app.schemas.auth import FrontendUserCreate, FrontendUserResponse, FrontendU
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/accounts", tags=["Accounts"])
+
+
+async def _other_admins(db: AsyncSession, account_id: uuid.UUID) -> int:
+    """How many administrators would be left besides this one."""
+    return (await db.execute(
+        select(func.count()).select_from(FrontendUser).where(FrontendUser.is_admin == True, FrontendUser.id != account_id)  # noqa: E712
+    )).scalar_one()
 
 
 @router.post(
@@ -81,6 +88,8 @@ async def update_account(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found.")
     changes: dict = {}
+    if payload.is_admin is False and user.is_admin and await _other_admins(db, user.id) == 0:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="At least one administrator must remain.")
     if payload.is_admin is not None:
         if payload.is_admin != user.is_admin:
             changes["is_admin"] = {"from": user.is_admin, "to": payload.is_admin}
@@ -106,10 +115,14 @@ async def update_account(
     dependencies=[AdminDep],
     summary="Delete a dashboard user account (admin only)",
 )
-async def delete_account(account_id: uuid.UUID, db: AsyncSession = DbDep):
+async def delete_account(account_id: uuid.UUID, db: AsyncSession = DbDep, current_user: dict = AdminDep):
     user = await db.get(FrontendUser, account_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found.")
+    if str(user.id) == current_user.get("sub"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot delete your own login.")
+    if user.is_admin and await _other_admins(db, user.id) == 0:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="At least one administrator must remain.")
     username, was_admin = user.username, user.is_admin
     await db.delete(user)
     await db.commit()

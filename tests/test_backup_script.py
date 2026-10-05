@@ -115,3 +115,11 @@ def test_rejects_unknown_command(tmp_path):
     result = _run(tmp_path, "bogus")
     assert result.returncode == 2
     assert "usage" in result.stderr.lower()
+
+
+def test_dumps_are_readable_by_their_owner_only(tmp_path):
+    """They hold encrypted Spond credentials and password hashes; the host's umask must not expose them."""
+    result = _run(tmp_path, "once")
+    assert result.returncode == 0, result.stderr
+    (dump,) = _dumps(tmp_path)
+    assert oct(dump.stat().st_mode & 0o777) == "0o600"

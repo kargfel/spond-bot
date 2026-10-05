@@ -118,6 +118,16 @@ Frontend changes are test-driven. `npm install` once, then:
 
 Member-facing labels: `accept`/`decline`/`manual` are shown as Going / Not going / Leave to me.
 
+## Security conventions
+
+- **Sessions are checked against the database** on every request (`deps._get_current_user`): never trust `is_admin`/`linked_user_id` from the cookie. It uses its own short session (`deps.open_session`), never `Depends(get_db)`, because SSE streams stay open for hours and would pin a pool connection. Session cookies carry `pwv` (password fingerprint): any password change must re-issue the cookie of the person changing it (`set_session_cookie`).
+- **CSP forbids inline scripts**: no `<script>` without `src`, no `onclick=` etc. (tests enforce it). Put behaviour in a `.js` file and add the file to the page. Remote scripts need `integrity=` and `crossorigin`.
+- **HTML is `Cache-Control: no-cache`** (no version in its URL). Keep new page routes on `_page()`. The service worker fetches navigations with `cache: "no-cache"` for the same reason.
+- User-controlled text in `innerHTML` must go through `esc()`; `tests/frontend/e2e/xss.spec.js` plants markup in every view, add new views there.
+- New endpoints: decide who may call them (`CurrentUser` / `AdminDep`), check ownership for member routes, rate-limit anything that verifies a secret, and add an `audit.record()` call.
+- Passwords: `hash_password`/`verify_password` cut at 72 *bytes*; do not hash `plain[:72]` yourself.
+- `docs/security.md` lists protections, operator duties and known open items: update it when you change any of them.
+
 ## Audit trail
 
 - Every action that changes something calls `audit.record("area.action", target_type=…, target_id=…, target_label=…, details=…)` **after the commit** (staged on the request, written after the response). Name actions `area.verb`; the area is the filter category. New endpoints that write need a `record()` call; without one the middleware still logs a generic `http.<method>` row, but with no meaning.

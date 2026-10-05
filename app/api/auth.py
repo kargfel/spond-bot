@@ -113,7 +113,10 @@ async def me(current_user: FrontendUser = CurrentUser, db: AsyncSession = DbDep)
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Change own password",
 )
+@limiter.limit("5/minute")
 async def change_own_password(
+    request: Request,
+    response: Response,
     payload: PasswordChange,
     current_user: dict = CurrentUser,
     db: AsyncSession = DbDep,
@@ -121,6 +124,8 @@ async def change_own_password(
     """
     Let the authenticated user change their own password.
     They must provide the current password to verify identity before updating.
+    Every other session of this login ends; this one gets a fresh cookie and carries on.
+    Rate-limited, so a stolen session cannot be used to guess the current password.
     """
     result = await db.execute(
         select(FrontendUser).where(FrontendUser.id == uuid.UUID(current_user["sub"]))
@@ -139,5 +144,6 @@ async def change_own_password(
 
     user.hashed_password = hash_password(payload.new_password)
     await db.commit()
+    set_session_cookie(response, user)
     audit.record("auth.password_changed", target_type="login", target_id=user.id, target_label=user.username)
     logger.info("User %r changed their password.", user.username)

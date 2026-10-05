@@ -9,6 +9,7 @@ from fastapi import Response
 
 from app.config import settings
 from app.core.jwt import ACCESS_TOKEN_TTL, create_access_token
+from app.core.security import password_version
 from app.models.frontend_user import FrontendUser
 
 COOKIE_NAME = "sb_session"
@@ -23,6 +24,8 @@ def set_session_cookie(response: Response, user: FrontendUser) -> None:
             "username": user.username,
             "is_admin": user.is_admin,
             "linked_user_id": str(user.linked_user_id) if user.linked_user_id else None,
+            # Changing the password changes this, which ends every session issued before (see deps.py)
+            "pwv": password_version(user.hashed_password),
         }
     )
     response.set_cookie(

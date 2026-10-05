@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # Contact for push services (mailto: or https: URL). Defaults to https://<SITE_DOMAIN>.
     vapid_subject: str = ""
 
+    # Comma-separated IPs/CIDRs of the reverse proxy whose X-Forwarded-For is believed.
+    # Read by uvicorn through the Dockerfile; declared here so the app can warn about "*".
+    trusted_proxies: str = "*"
+
     # Audit trail: who did what, when, from where. Entries older than the retention
     # (in days) are deleted nightly; IP addresses are personal data, so keep it short.
     audit_enabled: bool = True

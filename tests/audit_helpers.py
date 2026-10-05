@@ -7,7 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
 from app.core.jwt import create_access_token
-from app.core.security import hash_password
+from app.core.security import hash_password, password_version
 from app.database import get_db
 from app.models.audit_log import AuditLog
 from app.models.frontend_user import FrontendUser
@@ -29,6 +29,7 @@ def cookie_for(user: FrontendUser) -> str:
     return create_access_token({
         "sub": str(user.id), "username": user.username, "is_admin": user.is_admin,
         "linked_user_id": str(user.linked_user_id) if user.linked_user_id else None,
+        "pwv": password_version(user.hashed_password),
     })
 
 

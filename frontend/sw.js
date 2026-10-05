@@ -11,9 +11,9 @@
  * until the page asks it to take over (see registerServiceWorker() in app.js), so open pages never
  * run old scripts against new caches. Pure logic lives in sw-core.js (unit tested).
  */
-importScripts("/sw-core.js?v=1");
+importScripts("/sw-core.js?v=2");
 
-const VERSION = "1";
+const VERSION = "3";
 const CACHE = `spondbot-v${VERSION}`;
 const MAX_RUNTIME_ENTRIES = 120;
 
@@ -35,7 +35,6 @@ self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const stale = SwCore.staleCacheNames(await caches.keys(), CACHE);
     await Promise.all(stale.map((name) => caches.delete(name)));
-    if (self.registration.navigationPreload) await self.registration.navigationPreload.enable();
     await self.clients.claim();
   })());
 });
@@ -57,7 +56,9 @@ async function offlinePage(fallback) {
 
 async function navigate(event) {
   try {
-    const response = (await event.preloadResponse) || (await fetch(event.request));
+    // "no-cache": always ask the server. A page the browser still holds in its HTTP cache must not
+    // pass for a live answer, or being offline would go unnoticed and the offline page never show.
+    const response = await fetch(event.request, { cache: "no-cache" });
     return SwCore.isServerDown(response.status) ? offlinePage(response) : response;
   } catch {
     return offlinePage();

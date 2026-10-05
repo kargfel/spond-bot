@@ -269,6 +269,8 @@ docker compose start app backup
 
 Use the same `FERNET_KEY` as when the backup was taken. On start the app runs any newer migrations automatically.
 
+Dumps are readable by their owner only (root, because the backup container writes them), since they hold every member's encrypted Spond credentials and the password hashes. Read them with `sudo`, e.g. `sudo sh -c 'docker compose exec -T db pg_restore --clean --if-exists --no-owner -U spond -d spond_bot < backups/….dump'`. Dumps made before this was introduced keep their old permissions: run `sudo chmod 600 backups/*.dump` once.
+
 ---
 
 ## Logs
