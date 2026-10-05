@@ -112,7 +112,7 @@ def warn_if_proxies_untrusted(trusted_proxies: str, site_domain: str) -> bool:
             "TRUSTED_PROXIES is not set, so only 127.0.0.1 is trusted: behind a reverse proxy every "
             "visitor looks like the proxy (one IP in the audit log, one shared login rate limit). "
             "Set TRUSTED_PROXIES in .env to your reverse proxy's IP or network, e.g. "
-            "TRUSTED_PROXIES=172.18.0.5. scripts/proxy_check.py finds and tests the value (docs/setup.md)."
+            "TRUSTED_PROXIES=172.18.0.5 (docs/setup.md)."
         )
     return True
 

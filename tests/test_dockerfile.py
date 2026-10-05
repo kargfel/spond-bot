@@ -41,12 +41,3 @@ def test_the_shell_expands_trusted_proxies_from_the_environment():
     assert expand(TRUSTED_PROXIES="") == "--forwarded-allow-ips=127.0.0.1"                    # `TRUSTED_PROXIES=` in .env
     assert expand(TRUSTED_PROXIES="10.0.0.5") == "--forwarded-allow-ips=10.0.0.5"
     assert expand(TRUSTED_PROXIES="172.18.0.0/16,10.0.0.5") == "--forwarded-allow-ips=172.18.0.0/16,10.0.0.5"
-
-
-def test_the_proxy_check_script_uses_the_same_default_as_the_dockerfile():
-    import re
-    from pathlib import Path
-
-    script = (Path(__file__).resolve().parent.parent / "scripts" / "proxy_check.py").read_text()
-    assert re.search(r'DEFAULT_TRUSTED = "127\.0\.0\.1"', script)
-    assert "${TRUSTED_PROXIES:-127.0.0.1}" in DOCKERFILE

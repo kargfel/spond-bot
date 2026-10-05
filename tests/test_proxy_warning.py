@@ -33,7 +33,7 @@ def test_the_unset_warning_says_every_visitor_looks_like_the_proxy_and_how_to_fi
         warn_if_proxies_untrusted("", "spond.example.com")
     assert "only 127.0.0.1 is trusted" in caplog.text
     assert "every visitor looks like the proxy" in caplog.text and "shared login rate limit" in caplog.text
-    assert "TRUSTED_PROXIES=" in caplog.text and "proxy_check.py" in caplog.text
+    assert "TRUSTED_PROXIES=" in caplog.text and "docs/setup.md" in caplog.text
 
 
 def test_the_setting_is_unset_by_default():

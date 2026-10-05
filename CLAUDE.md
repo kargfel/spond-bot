@@ -79,7 +79,6 @@ scripts/
   healthcheck.py           Docker HEALTHCHECK probe (exit 0 only on HTTP 200)
   backup.sh                pg_dump loop/once/check for the compose `backup` service
   generate_vapid_key.py    Prints VAPID_PRIVATE_KEY for Web Push
-  proxy_check.py           Finds/tests TRUSTED_PROXIES with a throwaway server (peer | verify)
   build_icons.sh           Regenerates frontend/icons/ from docs/branding/ (ImageMagick)
   fetch_fonts.py           Downloads the latin font subsets into frontend/fonts/
 frontend/                  Static pages, no build step (served by app/main.py)
@@ -137,7 +136,7 @@ Member-facing labels: `accept`/`decline`/`manual` are shown as Going / Not going
 - Successful GETs are deliberately not logged. Reading the trail is not logged; exporting it is.
 - Frontend labels live in `Core.auditLabel` (`frontend/core.js`): add a label when you add an action.
 - Tests: `AUDIT_ENABLED=false` by default (tests/conftest.py); opt in with the `audit_on` fixture and use `tests/audit_helpers.py` (real login cookies, no auth overrides, so the middleware sees the actor).
-- IPs come from uvicorn's `--forwarded-allow-ips` (`TRUSTED_PROXIES` from `.env`; default `127.0.0.1`, never `*`: tests forbid a wildcard default). Behind a proxy the operator must set it; `scripts/proxy_check.py` finds and tests the value (docs/setup.md).
+- IPs come from uvicorn's `--forwarded-allow-ips` (`TRUSTED_PROXIES` from `.env`; default `127.0.0.1`, never `*`: tests forbid a wildcard default). Behind a proxy the operator must set it (docs/setup.md).
 
 ## PWA and Web Push
 

@@ -23,7 +23,7 @@ The assets worth protecting: members' **Spond credentials** (stored encrypted; w
 
 ## What the operator must do
 
-1. **Set `TRUSTED_PROXIES`** to your reverse proxy's IP or network. Unset, only 127.0.0.1 is believed and every visitor looks like the proxy (one IP in the audit log, one shared login limit); `*` lets a visitor fake their IP and dodge the per-IP login limit. `scripts/proxy_check.py` finds the address and tests it before a deploy; afterwards **Audit** must show your own address. See `docs/setup.md`.
+1. **Set `TRUSTED_PROXIES`** to your reverse proxy's IP or network. Unset, only 127.0.0.1 is believed and every visitor looks like the proxy (one IP in the audit log, one shared login limit); `*` lets a visitor fake their IP and dodge the per-IP login limit. Afterwards **Audit** must show your own address. See `docs/setup.md`.
 2. **Firewall port 8080** to the reverse proxy only (see `DEPLOY.md`). Docker-published ports bypass `ufw`: check from another machine that 8080 really is closed (`docs/setup.md`).
 3. **Keep `FERNET_KEY` apart from the backups.** Backups plus key together expose every member's Spond credentials.
 4. Use a **strong admin password** and tell members that sign-ins and changes are logged (IP addresses are personal data; `AUDIT_RETENTION_DAYS`).

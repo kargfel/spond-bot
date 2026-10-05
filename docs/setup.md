@@ -60,7 +60,7 @@ TZ=Europe/Berlin
 | `VAPID_SUBJECT` | `https://<SITE_DOMAIN>` | Contact URL (`https:` or `mailto:`) that push services can use to reach you |
 | `AUDIT_RETENTION_DAYS` | `90` | Audit entries older than this are deleted every night (03:17). IP addresses are personal data, so keep it short |
 | `AUDIT_ENABLED` | `true` | Set to `false` to switch the audit trail off completely |
-| `TRUSTED_PROXIES` | `127.0.0.1` | Comma-separated IPs or CIDRs of your reverse proxy: the only peers whose `X-Forwarded-For` is believed. **Set this** when running behind a proxy. How to find and test the value: [Find and test TRUSTED_PROXIES](#find-and-test-trusted_proxies) |
+| `TRUSTED_PROXIES` | `127.0.0.1` | Comma-separated IPs or CIDRs of your reverse proxy: the only peers whose `X-Forwarded-For` is believed. **Set this** when running behind a proxy: [Set TRUSTED_PROXIES](#set-trusted_proxies) |
 | `BACKUP_DIR` | `./backups` | Host folder for database dumps (compose `backup` service) |
 | `BACKUP_INTERVAL_HOURS` | `24` | Time between backups |
 | `BACKUP_KEEP_DAYS` | `14` | Dumps older than this are deleted after a successful backup |
@@ -152,68 +152,25 @@ Admin panel → **Audit** shows who did what, when and from where: sign-ins (inc
 - **Retention:** entries older than `AUDIT_RETENTION_DAYS` (default 90) are removed every night. The trail is append-only from the app's point of view: there is no way to edit or delete entries in the UI.
 - **Privacy:** IP addresses and browser strings are personal data. Tell your members that sign-ins and changes are logged, and keep the retention short.
 
-### Find and test TRUSTED_PROXIES
+### Set TRUSTED_PROXIES
 
 Behind a reverse proxy the app learns a visitor's IP only from the `X-Forwarded-For` header the proxy adds. `TRUSTED_PROXIES` says whose header to believe:
 
 | Setting | Result |
 |---|---|
-| your proxy's IP (or network) | **right**: the real visitor IP is recorded; a visitor cannot fake it |
+| your proxy's IP (or network) | **right**: the real visitor IP is recorded and cannot be faked |
 | not set (default) | only `127.0.0.1` is believed: every visitor looks like the proxy, so the audit log shows one IP and all members share **one** login rate limit |
 | `*` | everyone is believed: a visitor can fake their IP and dodge the login limit |
 
-You set it in `.env`; Docker Compose hands that file to the container and the start command picks it up:
+Write it into `.env` (no quotes); Docker Compose passes that file to the container:
 
 ```env
-TRUSTED_PROXIES=10.0.0.5            # one proxy (no quotes)
+TRUSTED_PROXIES=10.0.0.5            # one proxy
 TRUSTED_PROXIES=172.18.0.0/16       # or a whole network; several: comma-separated
 ```
 
-`scripts/proxy_check.py` finds the right value and tests it **before** you change anything for real. It starts a tiny throwaway server (no database, no app code) next to your running app; the running container is not touched.
+The address to use is the one the app sees the proxy connect from. With the Traefik setup in `DEPLOY.md` that is the jumpHost's internal IP, the same one your firewall rule for port 8080 allows (`sudo ufw status | grep 8080`). After a deploy, sign in and check the IP column in **Audit**: it must show your own address, not the proxy's. The app logs a warning at startup while the setting is unset or `*` on a public domain.
 
-**1. Build the new image** (the running container keeps running the old one):
-
-```bash
-docker compose build app
-```
-
-**2. Find the address.** Start the check on a spare port (`-p 8099:8080` publishes it):
-
-```bash
-docker compose run --rm --no-deps -p 8099:8080 app python scripts/proxy_check.py peer
-```
-
-Now open it **from your reverse proxy's machine** (for the Traefik setup in `DEPLOY.md`: SSH into the jumpHost) and call the app VM's address on that port:
-
-```bash
-curl http://<app-vm-ip>:8099/
-```
-
-It answers `Connection comes from: <address>` and the line to put in `.env`. That address is what the app sees as the proxy (your Traefik VM's internal IP; if Traefik runs in a container it is still the VM's address, because outgoing container traffic is masqueraded). Stop the check with Ctrl+C.
-
-**3. Put it in `.env`** (`TRUSTED_PROXIES=<address>`) and test it the way the app will run, again without touching the live app:
-
-```bash
-docker compose run --rm --no-deps -p 8099:8080 app python scripts/proxy_check.py verify
-```
-
-Two calls tell you everything:
-
-```bash
-# from the proxy machine: a proxy's header must be believed
-curl -H 'X-Forwarded-For: 203.0.113.9' http://<app-vm-ip>:8099/
-#   -> SpondBot would record this visitor as: 203.0.113.9   RESULT: header honored
-
-# from the app VM itself (or any other machine): nobody else may fake an address
-curl -H 'X-Forwarded-For: 203.0.113.9' http://localhost:8099/
-#   -> RESULT: header ignored
-```
-
-Both as shown: the value is right and spoofing is blocked. If the first says *ignored*, the address is wrong or too narrow; if the second says *honored*, it is too wide.
-
-**4. Deploy** (`docker compose up -d --build`), then sign in and open **Audit**: the IP column must show **your** address, not the proxy's. The app also logs a warning at startup while `TRUSTED_PROXIES` is unset or `*` on a public domain.
-
-> **Firewall note.** Ports published by Docker bypass `ufw` rules (Docker adds its own firewall rules ahead of them). Check that port 8080 is really closed to everyone but the proxy: from another machine, `curl http://<app-vm-ip>:8080/api/v1/health` should **not** answer. If it does, restrict it with a rule in the `DOCKER-USER` chain, or publish the port on the proxy-facing interface only (`ports: ["<app-vm-internal-ip>:8080:8080"]`). That also protects the temporary check port.
 
 ---
 

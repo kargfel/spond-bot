@@ -34,5 +34,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 # decides the client IP in the audit log and the per-IP login limit.
 # The fallback trusts only the container itself (127.0.0.1), never everyone: with no proxy
 # entered, every visitor behind a proxy looks like the proxy (the app logs a warning at startup
-# saying so). scripts/proxy_check.py finds and tests the value; see docs/setup.md.
+# saying so). See docs/setup.md.
 CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips \"${TRUSTED_PROXIES:-127.0.0.1}\" --log-level info"]
