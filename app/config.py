@@ -38,8 +38,9 @@ class Settings(BaseSettings):
     vapid_subject: str = ""
 
     # Comma-separated IPs/CIDRs of the reverse proxy whose X-Forwarded-For is believed.
-    # Read by uvicorn through the Dockerfile; declared here so the app can warn about "*".
-    trusted_proxies: str = "*"
+    # Read by uvicorn through the Dockerfile (unset = only 127.0.0.1); declared here so the app
+    # can warn when it is unset or "*".
+    trusted_proxies: str = ""
 
     # Audit trail: who did what, when, from where. Entries older than the retention
     # (in days) are deleted nightly; IP addresses are personal data, so keep it short.

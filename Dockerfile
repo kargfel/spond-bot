@@ -32,8 +32,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 #     TRUSTED_PROXIES=<proxy IP>
 # docker compose hands .env to the container. Only those peers' X-Forwarded-For is believed; it
 # decides the client IP in the audit log and the per-IP login limit.
-# The fallback "*" trusts everyone, so a visitor can fake their IP. It stays only so that existing
-# setups keep working until the proxy's IP is entered (behind a proxy on another host, 127.0.0.1
-# would make every visitor look like the proxy and share one login limit). The app logs a warning
-# at startup while TRUSTED_PROXIES is unset on a public domain. See docs/setup.md and DEPLOY.md.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips \"${TRUSTED_PROXIES:-*}\" --log-level info"]
+# The fallback trusts only the container itself (127.0.0.1), never everyone: with no proxy
+# entered, every visitor behind a proxy looks like the proxy (the app logs a warning at startup
+# saying so). scripts/proxy_check.py finds and tests the value; see docs/setup.md.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips \"${TRUSTED_PROXIES:-127.0.0.1}\" --log-level info"]

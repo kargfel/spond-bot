@@ -93,17 +93,27 @@ async def _seed_admin() -> None:
 
 def warn_if_proxies_untrusted(trusted_proxies: str, site_domain: str) -> bool:
     """
-    On a public site, trusting X-Forwarded-For from everyone lets a visitor fake their IP:
-    the audit trail records the fake and the per-IP login limit can be dodged by changing it.
-    Returns True when it warned.
+    A public site sits behind a reverse proxy, and the visitor's IP only reaches the app in
+    X-Forwarded-For. Two settings are wrong there. Unset: only 127.0.0.1 is believed, so every
+    visitor looks like the proxy (the audit log shows one IP, all members share one login limit).
+    "*": everyone is believed, so a visitor can fake their IP. Returns True when it warned.
     """
-    if site_domain == "localhost" or trusted_proxies.strip() not in ("", "*"):
+    value = trusted_proxies.strip()
+    if site_domain == "localhost" or value not in ("", "*"):
         return False
-    logger.warning(
-        "TRUSTED_PROXIES is not set, so any visitor can fake their IP address (X-Forwarded-For). "
-        "This weakens the audit log and the login rate limit. Set TRUSTED_PROXIES in .env to your "
-        "reverse proxy's IP or network, e.g. TRUSTED_PROXIES=172.18.0.0/16 (see docs/setup.md)."
-    )
+    if value == "*":
+        logger.warning(
+            "TRUSTED_PROXIES=* trusts every sender, so any visitor can fake their IP address "
+            "(X-Forwarded-For): the audit log can be lied to and the login rate limit dodged. "
+            "Set TRUSTED_PROXIES in .env to your reverse proxy's IP or network."
+        )
+    else:
+        logger.warning(
+            "TRUSTED_PROXIES is not set, so only 127.0.0.1 is trusted: behind a reverse proxy every "
+            "visitor looks like the proxy (one IP in the audit log, one shared login rate limit). "
+            "Set TRUSTED_PROXIES in .env to your reverse proxy's IP or network, e.g. "
+            "TRUSTED_PROXIES=172.18.0.5. scripts/proxy_check.py finds and tests the value (docs/setup.md)."
+        )
     return True
 
 
