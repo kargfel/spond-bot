@@ -334,3 +334,16 @@ dialog::backdrop { background: rgba(10, 16, 14, 0.45); }
 .push-status[data-kind="blocked"], .push-status[data-kind="needs-install"] { background: var(--bad-soft); border-color: var(--bad-line); }
 .steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
 .dialog-actions-wrap { flex-wrap: wrap; }
+
+/* ── Notification settings ─────────────────────────────────────────── */
+.pref-form { display: grid; gap: 10px; padding-top: 4px; border-top: 1px solid var(--line); }
+.pref-form h3 { font-size: 15px; font-weight: 700; padding-top: 10px; }
+.pref-group { border: 0; margin: 0; padding: 0; display: grid; gap: 4px; min-width: 0; }
+.pref-group legend { font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding: 6px 0 2px; }
+.pref-item { display: flex; align-items: flex-start; gap: 12px; padding: 8px 4px; border-radius: 8px; cursor: pointer; }
+.pref-item:hover { background: var(--surface-2); }
+.pref-item input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; accent-color: var(--accent); }
+.pref-item b { display: block; font-weight: 600; }
+.pref-item small { display: block; color: var(--muted); font-size: 13px; line-height: 1.35; }
+.pref-saved { min-height: 18px; font-size: 13px; color: var(--go); }
+dialog { max-height: calc(100dvh - 24px); overflow-y: auto; }

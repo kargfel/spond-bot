@@ -79,6 +79,10 @@ The upsert never overwrites an existing `user_choice` — only metadata (heading
 
 Both paths converge on `_process_event()`, which handles status transitions, 401 retry, and error recording.
 
+### `app/services/reminders.py` — Registration reminders
+
+A scheduler job (`reminders`, every minute at :30) finds undecided events (`user_choice=manual`, `status=pending`, registration opening within 8 h, event not over). `due_threshold()` picks the smallest of 8/4/1 h the remaining time has fallen under, so an event found late gets one reminder. `_claim()` inserts the `reminder_log` row first (primary key event + hours), which makes sending at-most-once across restarts and overlapping runs. `push.send_to_spond_user(..., kind="reminder_4h")` then delivers only to logins that have that kind on (`notification_settings`); a claimed reminder nobody wanted is not repeated later. The answer notifications use the same `kind` filter (`answer_sent`, `answer_failed`). Each sent reminder is an audit event `reminder.sent`.
+
 ### `app/services/audit.py` — Audit trail
 
 Two ways in. **Explicit events:** handlers call `audit.record("event.choice_set", target_type=…, details=…)` *after* the change was committed; the row is staged on the request and written once the response is out, together with IP, user agent, method, path, status and request id. The bot uses `await audit.record_system(...)`: the executioner's `_notify_member()` writes `rsvp.sent` / `rsvp.failed` with member, choice, latency, retries and error, which is what the admin panel's answer view shows (the `rsvp_log` table remains the source for stats and charts; migration 008 copied its last 90 days into the trail). **Safety net:** `AuditMiddleware` (pure ASGI) gives every write request, every 403/429, every 401 on a write and every 5xx that no handler described a generic `http.<method>` row, so nothing a person does goes unrecorded. Successful reads are not logged. A staged success is downgraded to `failed`/`denied` if the request ended in an error. `scrub()` drops secret-looking keys (password, token, key, …) and bounds sizes. Writing never breaks a request (errors are logged and swallowed). A nightly job (`audit_purge`, 03:17) deletes entries older than `AUDIT_RETENTION_DAYS`. The client IP is `scope["client"]`, which uvicorn derives from `X-Forwarded-For` only for peers in `TRUSTED_PROXIES`.
@@ -127,6 +131,8 @@ All routes are prefixed with `/api/v1/`.
 | `GET` | `/admin/audit` | admin | Audit trail: filters `q`, `category`, `outcome`, `actor_id`, `since`, `until`; cursor pagination |
 | `GET` | `/admin/audit/export.csv` | admin | The same filters as a CSV download (up to 50,000 rows); the export itself is logged |
 | `GET` | `/push/config` | user | Whether Web Push is set up, and the VAPID public key to subscribe with |
+| `GET` | `/push/preferences` | user | Which notifications this login wants (all on if never saved) |
+| `PUT` | `/push/preferences` | user | Save them; all five fields required, shared by all devices; audited |
 | `POST` | `/push/subscribe` | user | Register this browser (`PushSubscription.toJSON()`); only known push services are accepted |
 | `POST` | `/push/unsubscribe` | user | Forget this browser (own devices only) |
 | `POST` | `/push/test` | user | Send a test notification to your own devices (rate-limited) |
@@ -217,6 +223,17 @@ outcome          VARCHAR  (success|denied|failed)
 target_type, target_id, target_label  VARCHAR
 details          JSON        ← e.g. {"from": "manual", "to": "accept"}; secrets are scrubbed
 ip, user_agent, method, path, status_code, request_id
+
+notification_settings  (which notifications a login wants; no row = everything on)
+──────────────────────────────────────────────────────────────
+frontend_user_id UUID PK FK → frontend_users.id (CASCADE DELETE)
+answer_sent, answer_failed, reminder_8h, reminder_4h, reminder_1h   BOOL (default true)
+
+reminder_log  (which reminders were already sent: at most once per event and step)
+──────────────────────────────────────────────────────────────
+event_id         UUID PK FK → events.id (CASCADE DELETE)
+hours            INT  PK       ← 8, 4 or 1; inserting the row claims the reminder
+sent_at          TIMESTAMPTZ
 
 push_subscriptions  (one row per browser/device that gets notifications)
 ──────────────────────────────────────────────────────────────

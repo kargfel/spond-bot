@@ -98,5 +98,11 @@
   /** Sends a test notification to the member's devices. Resolves to { devices, delivered }. */
   const test = () => apiJson("/push/test", "POST");
 
-  window.SpondPush = { state, enable, disable, test, supported };
+  /** The member's notification settings (shared by all their devices). */
+  const preferences = () => apiJson("/push/preferences");
+
+  /** Saves all settings at once; resolves to what the server stored. */
+  const savePreferences = (prefs) => apiJson("/push/preferences", "PUT", prefs);
+
+  window.SpondPush = { state, enable, disable, test, supported, preferences, savePreferences };
 })();

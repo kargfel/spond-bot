@@ -170,3 +170,16 @@ describe("safeTargetUrl", () => {
     for (const bad of ["", "http://x", "//x", "\\\\x", undefined]) assert.equal(Sw.safeTargetUrl(bad, ORIGIN), "/", String(bad));
   });
 });
+
+describe("reminder notifications", () => {
+  test("a reminder is a quiet notification that replaces the previous one for the same event and opens the dashboard", () => {
+    const { title, options } = Sw.notificationFromPush({
+      title: "Registration opens in 4 hours", body: "League match: you haven't chosen yet.",
+      tag: "reminder-e1", url: "/dashboard", outcome: "success",
+    }, ORIGIN);
+    assert.equal(title, "Registration opens in 4 hours");
+    assert.equal(options.tag, "reminder-e1");
+    assert.deepEqual(options.data, { url: "/dashboard" });
+    assert.equal(options.requireInteraction, undefined, "a reminder must not stay on screen like a failure");
+  });
+});

@@ -134,7 +134,11 @@ function defaultState() {
       { id: "i3", token: "old-token", note: null, created_at: iso(NOW - 10 * D), expires_at: iso(NOW - 3 * D), used_at: null },
     ],
     audit: defaultAudit(),
-    push: { enabled: true, subscriptions: [], delivered: null, testStatus: 200, subscribeStatus: 204 },
+    push: {
+      enabled: true, subscriptions: [], delivered: null, testStatus: 200, subscribeStatus: 204,
+      // per login, shared by all devices; a login that never saved anything has everything on
+      preferences: {}, preferencesStatus: 200,
+    },
     charts: {
       latency_scatter: [
         { fired_at: iso(NOW - 2 * D), latency_ms: 41, user_name: "Felix Karg", heading: "Training, Hall B" },
@@ -277,6 +281,17 @@ class MockApi {
     // Web Push
     if (method === "GET" && p === "/push/config") {
       return json(200, { enabled: s.push.enabled, public_key: s.push.enabled ? VAPID_PUBLIC_KEY : null });
+    }
+    if (p === "/push/preferences") {
+      const KEYS = ["answer_sent", "answer_failed", "reminder_8h", "reminder_4h", "reminder_1h"];
+      if (method === "GET") return json(200, { ...Object.fromEntries(KEYS.map((k) => [k, true])), ...(s.push.preferences[me.sub] || {}) });
+      if (method === "PUT") {
+        if (s.push.preferencesStatus !== 200) return json(s.push.preferencesStatus, { detail: "The server could not save your settings." });
+        const valid = body && KEYS.every((k) => typeof body[k] === "boolean") && Object.keys(body).every((k) => KEYS.includes(k));
+        if (!valid) return json(422, { detail: "Invalid settings." });
+        s.push.preferences[me.sub] = { ...body };
+        return json(200, body);
+      }
     }
     if (method === "POST" && p === "/push/subscribe") {
       if (s.push.subscribeStatus !== 204) return json(s.push.subscribeStatus, { detail: "Subscribing failed on the server." });

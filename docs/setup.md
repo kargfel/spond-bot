@@ -128,13 +128,17 @@ Installing and the service worker need **HTTPS** (or `localhost`). The reverse p
 
 ### Push notifications (optional)
 
-Members can get a notification when SpondBot sends an answer for them, or fails to.
+Members can get a notification when SpondBot sends an answer for them or fails to, and a reminder when registration is about to open for an event they haven't chosen an answer for.
 
 1. Generate a key once and add the printed line to `.env`:
    ```bash
    docker compose run --rm app python scripts/generate_vapid_key.py
    ```
 2. Restart the app. The account menu now shows **Notifications**; each member turns them on per device and can send themselves a test.
+
+**Which notifications:** in the same dialog each member chooses what they get: *Answer sent*, *Answer failed* and the reminders *Registration opens in 8 hours / 4 hours / 1 hour*. The choice belongs to the account (all devices) and is saved as soon as a switch is flipped. Everything is on by default, so members who already had notifications on get the reminders without doing anything.
+
+**Reminders:** every minute SpondBot looks for events that are *undecided* (answer "Leave to me", registration opening still ahead). When registration opens in 8, 4 or 1 hours the member gets one reminder per step, at most once (a restart cannot repeat it). An event discovered late gets one reminder for the step it is already past, not several at once. Deciding an event, at any time, ends its reminders. Reminders are sent at exactly those times, also at night.
 
 Notes:
 - **iPhone/iPad** only deliver web push to apps added to the Home Screen (iOS 16.4+).

@@ -20,6 +20,7 @@ _scheduler = AsyncIOScheduler(timezone=settings.tz)
 def start_scheduler() -> None:
     from app.workers.discovery import run_discovery
     from app.services.audit import run_purge
+    from app.services.reminders import run_reminders
     from app.workers.executioner import run_executioner
 
     _scheduler.add_job(
@@ -41,6 +42,14 @@ def start_scheduler() -> None:
         misfire_grace_time=15,
     )
 
+    _scheduler.add_job(
+        run_reminders,
+        trigger=CronTrigger(second=30, timezone=settings.tz),  # every minute, offset from the executioner
+        id="reminders",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=30,
+    )
     _scheduler.add_job(
         run_purge,
         trigger=CronTrigger(hour=3, minute=17, timezone=settings.tz),
