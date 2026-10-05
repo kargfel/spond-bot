@@ -142,7 +142,7 @@ test.describe("saving", () => {
     api.state.push.preferencesStatus = 500;
     await installFakePush(page, { subscribed: true, permission: "granted" });
     const dialog = await openNotifications(page);
-    await box(dialog, "Registration opens in 8 hours").uncheck();
+    await box(dialog, "Registration opens in 8 hours").click();
     await expect(dialog.getByRole("alert")).toContainText("Could not save: The server could not save your settings.");
     await expect(box(dialog, "Registration opens in 8 hours")).toBeChecked();
     await expect(dialog.locator("#push-prefs-saved").filter({ hasText: "Saved." })).toHaveCount(0);
