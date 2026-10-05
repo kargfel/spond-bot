@@ -22,6 +22,7 @@ from sqlalchemy import select
 from app.api import accounts as accounts_router
 from app.api.deps import AdminDep
 from app.api import admin as admin_router
+from app.api import audit as audit_router
 from app.api import auth as auth_router
 from app.api import stream as stream_router
 from app.api import events as events_router
@@ -30,6 +31,7 @@ from app.api import push as push_router
 from app.api import users as users_router
 from app.config import settings
 from app.core.security import hash_password
+from app.services.audit import AuditMiddleware
 from app.workers.scheduler import reschedule_pending_snipers, shutdown_scheduler, start_scheduler
 
 logging.basicConfig(
@@ -108,6 +110,9 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Audit trail: request context for every audited action (see app/services/audit.py)
+app.add_middleware(AuditMiddleware)
+
 # CORS is intentionally omitted — the frontend is served from the same origin.
 
 # API Routes
@@ -119,6 +124,7 @@ app.include_router(admin_router.router, prefix="/api/v1")
 app.include_router(stream_router.router, prefix="/api/v1")
 app.include_router(invites_router.router, prefix="/api/v1")
 app.include_router(push_router.router, prefix="/api/v1")
+app.include_router(audit_router.router, prefix="/api/v1")
 
 # ── Frontend Serving ────────────────────────────────────────────────
 

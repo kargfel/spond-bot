@@ -79,6 +79,10 @@ The upsert never overwrites an existing `user_choice` — only metadata (heading
 
 Both paths converge on `_process_event()`, which handles status transitions, 401 retry, and error recording.
 
+### `app/services/audit.py` — Audit trail
+
+Two ways in. **Explicit events:** handlers call `audit.record("event.choice_set", target_type=…, details=…)` *after* the change was committed; the row is staged on the request and written once the response is out, together with IP, user agent, method, path, status and request id. The bot uses `await audit.record_system(...)`. **Safety net:** `AuditMiddleware` (pure ASGI) gives every write request, every 403/429, every 401 on a write and every 5xx that no handler described a generic `http.<method>` row, so nothing a person does goes unrecorded. Successful reads are not logged. A staged success is downgraded to `failed`/`denied` if the request ended in an error. `scrub()` drops secret-looking keys (password, token, key, …) and bounds sizes. Writing never breaks a request (errors are logged and swallowed). A nightly job (`audit_purge`, 03:17) deletes entries older than `AUDIT_RETENTION_DAYS`. The client IP is `scope["client"]`, which uvicorn derives from `X-Forwarded-For` only for peers in `TRUSTED_PROXIES`.
+
 ### `app/services/push.py` — Web Push
 
 After every finished RSVP attempt `_notify_member()` in the executioner publishes to the SSE stream and calls `push.dispatch_rsvp_notification()`, which sends in the background and never raises into the RSVP path. Devices are found through `push_subscriptions → frontend_users.linked_user_id = event.user_id`. Payloads are encrypted per device and signed with the VAPID key (`pywebpush`). A 404/410 from the push service deletes the subscription. Subscription endpoints must belong to a known push service (`ALLOWED_HOST_SUFFIXES`), because the server POSTs to them. Without `VAPID_PRIVATE_KEY` everything is off and the dashboard hides the option.
@@ -120,6 +124,8 @@ All routes are prefixed with `/api/v1/`.
 | `DELETE` | `/invites/{id}` | admin | Revoke an invite |
 | `POST` | `/invites/check` | — | Is an invite token usable? (rate-limited) |
 | `POST` | `/invites/accept` | — | Create login + connect Spond + sign in (rate-limited) |
+| `GET` | `/admin/audit` | admin | Audit trail: filters `q`, `category`, `outcome`, `actor_id`, `since`, `until`; cursor pagination |
+| `GET` | `/admin/audit/export.csv` | admin | The same filters as a CSV download (up to 50,000 rows); the export itself is logged |
 | `GET` | `/push/config` | user | Whether Web Push is set up, and the VAPID public key to subscribe with |
 | `POST` | `/push/subscribe` | user | Register this browser (`PushSubscription.toJSON()`); only known push services are accepted |
 | `POST` | `/push/unsubscribe` | user | Forget this browser (own devices only) |
@@ -196,6 +202,21 @@ created_at       TIMESTAMPTZ
 expires_at       TIMESTAMPTZ
 used_at          TIMESTAMPTZ     ← set atomically when accepted
 used_by_id       UUID FK → frontend_users.id (SET NULL)
+
+audit_log  (append-only trail of who did what; no foreign keys, so it outlives what it describes)
+──────────────────────────────────────────────────────────────
+id               UUID PK
+occurred_at      TIMESTAMPTZ  INDEX
+actor_type       VARCHAR  (user|anonymous|system)
+actor_id         UUID        ← no FK: survives deleting the login
+actor_username   VARCHAR     ← copied, same reason
+actor_is_admin   BOOL
+action           VARCHAR  e.g. auth.login.failed, event.choice_set, rsvp.sent, http.post  INDEX
+category         VARCHAR  (first part of action)
+outcome          VARCHAR  (success|denied|failed)
+target_type, target_id, target_label  VARCHAR
+details          JSON        ← e.g. {"from": "manual", "to": "accept"}; secrets are scrubbed
+ip, user_agent, method, path, status_code, request_id
 
 push_subscriptions  (one row per browser/device that gets notifications)
 ──────────────────────────────────────────────────────────────

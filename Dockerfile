@@ -27,4 +27,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 
 # Run database migrations then start the API server.
 # Using shell form so environment variable substitution works.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips='*' --log-level info"]
+# TRUSTED_PROXIES (comma-separated IPs or CIDRs) are the only peers whose X-Forwarded-For is
+# believed: it decides the client IP in the audit log and the rate limiter. The default "*"
+# trusts everyone, so anyone can fake their IP; set it to your reverse proxy's address.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips \"${TRUSTED_PROXIES:-*}\" --log-level info"]

@@ -33,6 +33,7 @@ from app.schemas.charts import ChartsResponse, DailyRate, LatencyPoint, PerUserS
 from app.schemas.scheduler import ScheduledJob
 from app.schemas.rsvp_log import RsvpLogResponse
 from app.schemas.stats import AdminStatsResponse, RecentFailure
+from app.services import audit
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -315,6 +316,7 @@ async def cancel_scheduler_job(job_id: str):
     warmup_id = "warmup_" + job_id[len("sniper_"):]
     with contextlib.suppress(JobLookupError):
         scheduler.remove_job(warmup_id)
+    audit.record("scheduler.job_cancelled", target_type="event", target_id=job_id[len("sniper_"):])
 
 
 @router.post(
@@ -342,6 +344,7 @@ async def fire_scheduler_job(job_id: str):
         scheduler.remove_job(job_id)
 
     asyncio.create_task(run_sniper(event_id))
+    audit.record("scheduler.job_fired", target_type="event", target_id=event_id)
     return {"detail": f"Sniper for event {event_id} fired immediately."}
 
 
@@ -356,4 +359,5 @@ async def trigger_sync():
     import asyncio
     from app.workers.discovery import run_discovery
     asyncio.create_task(run_discovery())
+    audit.record("discovery.triggered")
     return {"detail": "Discovery sync triggered."}

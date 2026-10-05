@@ -63,7 +63,8 @@ Hash-routed views, so each one can be bookmarked:
 | `#queue` | Countdown to the next armed answer, health counters (armed, no answer, failed, latency p50/p95, last sync), and every account's events ordered by fire time. Change answers inline, send an armed answer now, disarm it, or retry a failure. |
 | `#timeline` | One lane per Spond account over two weeks: registration opening (marker) to event start (bar). Select a marker for details and to change the answer. |
 | `#users` | Invite members (single-use links, shown once, with copy button), the invites list with revoke, dashboard logins and Spond accounts: add, edit, pause, update the stored Spond password, delete. |
-| `#log` | RSVP audit log with latency from registration opening. |
+| `#log` | RSVP answer log (every answer SpondBot tried to send) with latency from registration opening. Not to be confused with `#audit`. |
+| `#audit` | Who did what, when and from where: sign-ins (also failed), changes with before → after, refusals, notification changes and the bot's own actions. Filter by text, area, result and period; click a time to see request, IP, browser and details; *Load more* pages back through history; *Export CSV* downloads what the filters show. All user-controlled text is escaped. |
 | `#charts` | Latency scatter and daily outcomes (Chart.js from jsDelivr, with SRI), plus a per-account table that works without the chart library. |
 
 Destructive actions use an in-page confirmation dialog.

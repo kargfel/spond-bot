@@ -53,10 +53,12 @@ app/
     rsvp_log.py            Audit log of every RSVP attempt
     invite.py              Single-use invite link (token stored as SHA-256 hash)
     push_subscription.py   One browser/device that gets Web Push (belongs to a dashboard login)
+    audit_log.py           Append-only audit trail row (who/what/target/outcome/IP, no FKs)
   services/
     auth.py                ensure_fresh_token() — token lifecycle
     spond_accounts.py      Verify Spond credentials + build encrypted User row
     push.py                Web Push: VAPID key, payloads, sending, expired-subscription cleanup
+    audit.py               Audit trail: record()/record_system(), AuditMiddleware, scrubbing, nightly purge
   workers/
     discovery.py           Worker A: sync events from Spond for all users
     executioner.py         Worker B: fire RSVPs + sniper DateTrigger helpers
@@ -67,6 +69,7 @@ app/
     users.py               /spond-accounts/* (Spond account CRUD; POST /me = connect own account; PUT /{id}/password)
     invites.py             /invites/* (admin create/list/revoke; public check/accept)
     push.py                /push/* (config, subscribe, unsubscribe, test) for the signed-in login
+    audit.py               /admin/audit (filters, cursor paging) and /admin/audit/export.csv
     events.py              /events/* (list, set decision) and /health
     admin.py               /admin/* (stats, charts, RSVP log, scheduler jobs, sync)
     stream.py              /admin/stream and /user/stream (SSE)
@@ -115,6 +118,16 @@ Frontend changes are test-driven. `npm install` once, then:
 
 Member-facing labels: `accept`/`decline`/`manual` are shown as Going / Not going / Leave to me.
 
+## Audit trail
+
+- Every action that changes something calls `audit.record("area.action", target_type=…, target_id=…, target_label=…, details=…)` **after the commit** (staged on the request, written after the response). Name actions `area.verb`; the area is the filter category. New endpoints that write need a `record()` call; without one the middleware still logs a generic `http.<method>` row, but with no meaning.
+- The bot's own actions use `await audit.record_system(...)`. `record()` outside a request does nothing.
+- Never put secrets in `details` (the scrubber is a safety net, not a licence). Use whitelisted fields and before/after values only.
+- Successful GETs are deliberately not logged. Reading the trail is not logged; exporting it is.
+- Frontend labels live in `Core.auditLabel` (`frontend/core.js`): add a label when you add an action.
+- Tests: `AUDIT_ENABLED=false` by default (tests/conftest.py); opt in with the `audit_on` fixture and use `tests/audit_helpers.py` (real login cookies, no auth overrides, so the middleware sees the actor).
+- IPs come from uvicorn's `--forwarded-allow-ips` (`TRUSTED_PROXIES`, default `*` = spoofable; docs/setup.md explains how to tighten it).
+
 ## PWA and Web Push
 
 - The app is installable (`manifest.webmanifest`, `sw.js` at the root). Page loads go network-first with `offline.html` as fallback; static files are stale-while-revalidate (**bump `?v=` on changed assets**); `/api/` is never cached. A new service worker waits until the member clicks Reload in the banner.
@@ -144,7 +157,7 @@ At invite_time:
 
 ## Configuration (env vars)
 
-See `docs/setup.md` for the full reference. Critical vars: `DATABASE_URL`, `FERNET_KEY`, `API_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `RSVP_LEAD_TIME_MS`. Optional: `VAPID_PRIVATE_KEY` (Web Push).
+See `docs/setup.md` for the full reference. Critical vars: `DATABASE_URL`, `FERNET_KEY`, `API_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `RSVP_LEAD_TIME_MS`. Optional: `VAPID_PRIVATE_KEY` (Web Push), `TRUSTED_PROXIES`, `AUDIT_RETENTION_DAYS`.
 
 ## Further Reading
 

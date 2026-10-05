@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     # Contact for push services (mailto: or https: URL). Defaults to https://<SITE_DOMAIN>.
     vapid_subject: str = ""
 
+    # Audit trail: who did what, when, from where. Entries older than the retention
+    # (in days) are deleted nightly; IP addresses are personal data, so keep it short.
+    audit_enabled: bool = True
+    audit_retention_days: int = 90
+
     # Admin dashboard account — seeded once on startup if no admin exists
     admin_username: str = "admin"
     admin_password: str = "changeme"

@@ -41,7 +41,7 @@ from app.models.event import (
 )
 from app.models.rsvp_log import OUTCOME_FAILED, OUTCOME_RETRY_SUCCESS, OUTCOME_SUCCESS, RsvpLog
 from app.models.user import User
-from app.services import push
+from app.services import audit, push
 from app.services.auth import ensure_fresh_token
 
 logger = logging.getLogger(__name__)
@@ -257,6 +257,13 @@ async def _notify_member(db_event: Event, outcome: str) -> None:
     })
     push.dispatch_rsvp_notification(
         db_event.user_id, db_event.id, db_event.heading, db_event.user_choice, outcome
+    )
+    await audit.record_system(
+        "rsvp.sent" if outcome == "success" else "rsvp.failed",
+        outcome="success" if outcome == "success" else "failed",
+        target_type="event", target_id=db_event.id, target_label=db_event.heading,
+        details={"choice": db_event.user_choice, "spond_user_id": db_event.user_id,
+                 **({"error": db_event.error_message} if outcome != "success" else {})},
     )
 
 

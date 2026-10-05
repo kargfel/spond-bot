@@ -58,6 +58,9 @@ TZ=Europe/Berlin
 | `TZ` | `Europe/Berlin` | Scheduler and log timezone |
 | `VAPID_PRIVATE_KEY` | empty (push off) | Signs Web Push notifications. Generate with `python scripts/generate_vapid_key.py`. Keep it: a new key invalidates every device's notification subscription |
 | `VAPID_SUBJECT` | `https://<SITE_DOMAIN>` | Contact URL (`https:` or `mailto:`) that push services can use to reach you |
+| `AUDIT_RETENTION_DAYS` | `90` | Audit entries older than this are deleted every night (03:17). IP addresses are personal data, so keep it short |
+| `AUDIT_ENABLED` | `true` | Set to `false` to switch the audit trail off completely |
+| `TRUSTED_PROXIES` | `*` | Comma-separated IPs or CIDRs of your reverse proxy: the only peers whose `X-Forwarded-For` is believed. See [Audit trail](#audit-trail) |
 | `BACKUP_DIR` | `./backups` | Host folder for database dumps (compose `backup` service) |
 | `BACKUP_INTERVAL_HOURS` | `24` | Time between backups |
 | `BACKUP_KEEP_DAYS` | `14` | Dumps older than this are deleted after a successful backup |
@@ -138,6 +141,32 @@ Notes:
 - Supported push services: Chrome and other Chromium browsers (FCM), Firefox, Safari. The server only sends to those hosts.
 - Signing out on a device turns its notifications off.
 - Only logins linked to a Spond account get answer notifications.
+
+---
+
+## Audit trail
+
+Admin panel → **Audit** shows who did what, when and from where: sign-ins (including failed ones, with the name that was tried), every change to logins, Spond accounts, invites and answers (with before → after), refusals (403, rate limits), notification changes, and what the bot itself did (answers sent or failed, sync runs). Each entry has IP address, browser, request path, status code and a request ID (also sent back as the `X-Request-ID` response header, so a support question can be traced). Filter by text, area, result and period; **Export CSV** downloads what the filters show.
+
+- **Not recorded:** successful reads (dashboard polling would drown everything), passwords, tokens and Spond credentials. Invite tokens and notification endpoints are never stored either.
+- **Retention:** entries older than `AUDIT_RETENTION_DAYS` (default 90) are removed every night. The trail is append-only from the app's point of view: there is no way to edit or delete entries in the UI.
+- **Privacy:** IP addresses and browser strings are personal data. Tell your members that sign-ins and changes are logged, and keep the retention short.
+
+### Make the IP addresses trustworthy
+
+Behind a reverse proxy the app learns a visitor's IP from `X-Forwarded-For`. With the default `TRUSTED_PROXIES=*` it believes that header from anyone, so a visitor can fake their IP in the audit trail and dodge the per-IP login rate limit. Set `TRUSTED_PROXIES` to your proxy's address as the container sees it:
+
+```bash
+# which address does the proxy have on the Docker network?
+docker network inspect <proxy-network> | grep -E '"Name"|IPv4Address'
+```
+
+```env
+TRUSTED_PROXIES=172.18.0.5          # one proxy
+TRUSTED_PROXIES=172.18.0.0/16       # or its whole Docker network
+```
+
+Check it from the admin panel: sign in, then look at the IP column in **Audit**. It must show your real address, not the proxy's. If every entry shows the proxy's IP, `TRUSTED_PROXIES` is too narrow (the proxy is not in it).
 
 ---
 
