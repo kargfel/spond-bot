@@ -56,8 +56,8 @@ async def _write_rsvp_log(
     outcome: str,
     retry_count: int,
     error_detail: str | None = None,
-) -> None:
-    """Append an immutable audit row for this RSVP attempt. Caller must commit."""
+) -> RsvpLog:
+    """Append an immutable row for this RSVP attempt (stats, charts). Caller must commit."""
     log = RsvpLog(
         event_id=event.id,
         user_id=user.id if user else None,
@@ -70,6 +70,16 @@ async def _write_rsvp_log(
         error_detail=error_detail,
     )
     db.add(log)
+    return log
+
+
+def _latency_ms(submitted_at: datetime | None, invite_time: datetime | None) -> int | None:
+    """Milliseconds from registration opening to the answer reaching Spond (naive times count as UTC)."""
+    if not submitted_at or not invite_time:
+        return None
+    def aware(dt: datetime) -> datetime:
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    return round((aware(submitted_at) - aware(invite_time)).total_seconds() * 1000)
 
 
 async def run_executioner() -> None:
@@ -104,6 +114,7 @@ async def run_executioner() -> None:
 async def _process_event(event: Event) -> None:
     """Handle a single RSVP submission with one automatic retry on 401."""
     fired_at = datetime.now(timezone.utc)
+    rsvp_log: RsvpLog | None = None
 
     async with AsyncSessionLocal() as db:
         # Atomically claim the event — only the caller that claims rowcount=1 proceeds.
@@ -127,7 +138,7 @@ async def _process_event(event: Event) -> None:
             )
             db_event.status = STATUS_FAILED
             db_event.error_message = "User not found or missing profile_id."
-            await _write_rsvp_log(
+            rsvp_log = await _write_rsvp_log(
                 db, db_event, None, fired_at, None, OUTCOME_FAILED, 0,
                 "User not found or missing profile_id.",
             )
@@ -140,7 +151,7 @@ async def _process_event(event: Event) -> None:
                 "outcome": "failed",
                 "latency_ms": None,
             })
-            await _notify_member(db_event, "failed")
+            await _notify_member(db_event, "failed", rsvp_log, user)
             return
 
         accepted = db_event.user_choice == CHOICE_ACCEPT
@@ -155,7 +166,7 @@ async def _process_event(event: Event) -> None:
             )
             db_event.status = STATUS_PROCESSED
             db_event.error_message = None
-            await _write_rsvp_log(db, db_event, user, fired_at, submitted_at, OUTCOME_SUCCESS, 0)
+            rsvp_log = await _write_rsvp_log(db, db_event, user, fired_at, submitted_at, OUTCOME_SUCCESS, 0)
             logger.info(
                 "RSVP %s for %r (%r) → SUCCESS",
                 "ACCEPT" if accepted else "DECLINE",
@@ -177,7 +188,7 @@ async def _process_event(event: Event) -> None:
                 )
                 db_event.status = STATUS_PROCESSED
                 db_event.error_message = None
-                await _write_rsvp_log(
+                rsvp_log = await _write_rsvp_log(
                     db, db_event, user, fired_at, submitted_at, OUTCOME_RETRY_SUCCESS, 1
                 )
                 logger.info(
@@ -189,7 +200,7 @@ async def _process_event(event: Event) -> None:
             except Exception as retry_exc:
                 db_event.status = STATUS_FAILED
                 db_event.error_message = f"Retry failed: {retry_exc}"
-                await _write_rsvp_log(
+                rsvp_log = await _write_rsvp_log(
                     db, db_event, user, fired_at, None, OUTCOME_FAILED, 1, str(retry_exc)
                 )
                 logger.error(
@@ -201,7 +212,7 @@ async def _process_event(event: Event) -> None:
         except SpondAPIError as exc:
             db_event.status = STATUS_FAILED
             db_event.error_message = str(exc)
-            await _write_rsvp_log(
+            rsvp_log = await _write_rsvp_log(
                 db, db_event, user, fired_at, None, OUTCOME_FAILED, 0, str(exc)
             )
             logger.error(
@@ -213,7 +224,7 @@ async def _process_event(event: Event) -> None:
         except Exception as exc:
             db_event.status = STATUS_FAILED
             db_event.error_message = f"Unexpected error: {exc}"
-            await _write_rsvp_log(
+            rsvp_log = await _write_rsvp_log(
                 db, db_event, user, fired_at, None, OUTCOME_FAILED, 0,
                 f"Unexpected error: {exc}",
             )
@@ -235,7 +246,7 @@ async def _process_event(event: Event) -> None:
                 "outcome": "success",
                 "latency_ms": None,
             })
-            await _notify_member(db_event, "success")
+            await _notify_member(db_event, "success", rsvp_log, user)
         elif db_event.status == STATUS_FAILED:
             await bus.publish_admin("rsvp_fired", {
                 "event_id": str(db_event.id),
@@ -245,11 +256,11 @@ async def _process_event(event: Event) -> None:
                 "outcome": "failed",
                 "latency_ms": None,
             })
-            await _notify_member(db_event, "failed")
+            await _notify_member(db_event, "failed", rsvp_log, user)
 
 
-async def _notify_member(db_event: Event, outcome: str) -> None:
-    """Tell the member their answer went out (or failed): live stream first, then Web Push."""
+async def _notify_member(db_event: Event, outcome: str, rsvp_log: RsvpLog | None = None, user: User | None = None) -> None:
+    """Tell the member their answer went out (or failed): live stream, Web Push, and the audit trail."""
     await bus.publish_user(str(db_event.user_id), "rsvp_fired", {
         "heading": db_event.heading,
         "choice": db_event.user_choice,
@@ -258,12 +269,24 @@ async def _notify_member(db_event: Event, outcome: str) -> None:
     push.dispatch_rsvp_notification(
         db_event.user_id, db_event.id, db_event.heading, db_event.user_choice, outcome
     )
+    ok = outcome == "success"
+    details = {
+        "choice": db_event.user_choice,
+        "member": user.display_name if user else None,
+        "spond_user_id": db_event.user_id,
+        "spond_event_id": db_event.spond_event_id,
+    }
+    if rsvp_log:
+        details["latency_ms"] = _latency_ms(rsvp_log.submitted_at, db_event.invite_time)
+        if rsvp_log.retry_count:
+            details["retries"] = rsvp_log.retry_count
+    if not ok:
+        details["error"] = db_event.error_message
     await audit.record_system(
-        "rsvp.sent" if outcome == "success" else "rsvp.failed",
-        outcome="success" if outcome == "success" else "failed",
+        "rsvp.sent" if ok else "rsvp.failed",
+        outcome="success" if ok else "failed",
         target_type="event", target_id=db_event.id, target_label=db_event.heading,
-        details={"choice": db_event.user_choice, "spond_user_id": db_event.user_id,
-                 **({"error": db_event.error_message} if outcome != "success" else {})},
+        details=details,
     )
 
 

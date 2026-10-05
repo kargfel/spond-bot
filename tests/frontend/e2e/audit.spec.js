@@ -23,7 +23,7 @@ test("opens from the navigation and from a bookmarked link", async ({ page }) =>
 
 test("lists the last week newest first, in plain words", async ({ page }) => {
   await openAudit(page);
-  await expect(rowsOf(page)).toHaveCount(6); // the 20-day-old entry is outside the default period
+  await expect(rowsOf(page)).toHaveCount(7); // the 20-day-old entry is outside the default period
   const rows = rowsOf(page);
   await expect(rows.nth(0)).toContainText("Signed in");
   await expect(rows.nth(0)).toContainText("felix");
@@ -37,10 +37,14 @@ test("lists the last week newest first, in plain words", async ({ page }) => {
   await expect(rows.nth(2)).toContainText("192.0.2.99");
   await expect(rows.nth(3)).toContainText("SpondBot");
   await expect(rows.nth(3)).toContainText("Answer sent");
-  await expect(rows.nth(4)).toContainText("Created login");
-  await expect(rows.nth(4).getByText("admin", { exact: true })).toBeVisible();
-  await expect(rows.nth(5)).toContainText("GET request");
-  await expect(rows.nth(5)).toContainText("refused");
+  await expect(rows.nth(3)).toContainText("Felix Karg · Going · 41 ms after opening");
+  await expect(rows.nth(4)).toContainText("Answer failed");
+  await expect(rows.nth(4)).toContainText("Mara Lind · Not going · after 1 retry · Retry failed: 403 member not found");
+  await expect(rows.nth(4)).toContainText("failed");
+  await expect(rows.nth(5)).toContainText("Created login");
+  await expect(rows.nth(5).getByText("admin", { exact: true })).toBeVisible();
+  await expect(rows.nth(6)).toContainText("GET request");
+  await expect(rows.nth(6)).toContainText("refused");
 });
 
 test("the period filter reaches back as far as asked", async ({ page, api }) => {
@@ -50,9 +54,9 @@ test("the period filter reaches back as far as asked", async ({ page, api }) => 
   expect(first.query.limit).toBe("100");
 
   await page.getByLabel("Period").selectOption("1h");
-  await expect(rowsOf(page)).toHaveCount(4);
+  await expect(rowsOf(page)).toHaveCount(5);
   await page.getByLabel("Period").selectOption("all");
-  await expect(rowsOf(page)).toHaveCount(7);
+  await expect(rowsOf(page)).toHaveCount(8);
   const last = api.callsTo("GET", "/admin/audit").at(-1);
   expect(last.query.since).toBeUndefined();
 });
@@ -111,11 +115,43 @@ test("an opened row stays open when the list is filtered again", async ({ page }
   await expect(rowsOf(page).first().getByRole("button")).toHaveAttribute("aria-expanded", "true");
 });
 
+test("the answer log lives here: sent and failed answers, filtered like any other entry", async ({ page, api }) => {
+  await openAudit(page);
+  await page.getByLabel("Area").selectOption("rsvp");
+  await expect(rowsOf(page)).toHaveCount(2);
+  await expect(rowsOf(page).first()).toContainText("Training, Hall B");
+  await page.getByLabel("Result").selectOption("failed");
+  await expect(rowsOf(page)).toHaveCount(1);
+  await expect(rowsOf(page).first()).toContainText("Autumn tournament");
+  expect(api.callsTo("GET", "/admin/audit").at(-1).query).toMatchObject({ category: "rsvp", outcome: "failed" });
+});
+
+test("an answer can be found by the member's name", async ({ page }) => {
+  await openAudit(page);
+  await page.getByRole("searchbox", { name: "Find" }).fill("mara");
+  await expect(rowsOf(page)).toHaveCount(2); // Mara's failed answer (name in the details) and the login created for her
+});
+
+test("the old Log bookmark opens the audit trail on answers", async ({ page, api }) => {
+  await page.goto("/admin#log");
+  await expect(page.getByRole("heading", { name: "Audit", level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(/#audit$/);
+  await expect(page.getByLabel("Area")).toHaveValue("rsvp");
+  await expect(rowsOf(page)).toHaveCount(2);
+  expect(api.callsTo("GET", "/admin/audit")[0].query.category).toBe("rsvp");
+});
+
+test("there is no separate Log view any more", async ({ page }) => {
+  await page.goto("/admin");
+  await expect(page.getByRole("navigation", { name: "Admin views" }).getByRole("link")).toHaveText(["Queue", "Timeline", "Users", "Audit", "Charts"]);
+});
+
 test("the bot's own actions are labelled as such", async ({ page }) => {
   await openAudit(page);
   const detail = table(page).locator("tr.audit-detail").nth(3);
   await rowsOf(page).nth(3).getByRole("button").click();
   await expect(detail).toContainText("by SpondBot itself");
+  await expect(detail.locator("pre")).toContainText('"latency_ms": 41');
   await expect(detail).not.toContainText("IP address");
 });
 

@@ -121,7 +121,7 @@ Member-facing labels: `accept`/`decline`/`manual` are shown as Going / Not going
 ## Audit trail
 
 - Every action that changes something calls `audit.record("area.action", target_type=…, target_id=…, target_label=…, details=…)` **after the commit** (staged on the request, written after the response). Name actions `area.verb`; the area is the filter category. New endpoints that write need a `record()` call; without one the middleware still logs a generic `http.<method>` row, but with no meaning.
-- The bot's own actions use `await audit.record_system(...)`. `record()` outside a request does nothing.
+- The bot's own actions use `await audit.record_system(...)`. Answers sent/failed are `rsvp.sent`/`rsvp.failed` with member, choice, latency_ms, retries and error: the admin panel has no separate answer-log view, the Audit view (area *Answers sent*) is it. `rsvp_log` stays for stats/charts. `record()` outside a request does nothing.
 - Never put secrets in `details` (the scrubber is a safety net, not a licence). Use whitelisted fields and before/after values only.
 - Successful GETs are deliberately not logged. Reading the trail is not logged; exporting it is.
 - Frontend labels live in `Core.auditLabel` (`frontend/core.js`): add a label when you add an action.

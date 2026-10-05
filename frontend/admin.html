@@ -30,7 +30,6 @@
         <a href="#queue" data-view="queue">Queue</a>
         <a href="#timeline" data-view="timeline">Timeline</a>
         <a href="#users" data-view="users">Users</a>
-        <a href="#log" data-view="log">Log</a>
         <a href="#audit" data-view="audit">Audit</a>
         <a href="#charts" data-view="charts">Charts</a>
       </nav>
@@ -150,39 +149,14 @@
         <div><button class="btn" type="button" id="add-spond-btn">Connect Spond account</button></div>
       </section>
 
-      <!-- ── Log ───────────────────────────────────────────────────── -->
-      <section class="view" id="view-log" aria-labelledby="log-title" hidden>
-        <div class="view-head">
-          <div><h1 id="log-title">Log</h1><p>Every answer SpondBot tried to send, newest first. Latency is measured from registration opening.</p></div>
-        </div>
-        <div class="filters">
-          <div class="field"><label for="log-account">Account</label><select class="input" id="log-account"><option value="">All accounts</option></select></div>
-          <div class="field">
-            <label for="log-outcome">Outcome</label>
-            <select class="input" id="log-outcome">
-              <option value="">All outcomes</option>
-              <option value="success">Succeeded</option>
-              <option value="retry_success">Succeeded after retry</option>
-              <option value="failed">Failed</option>
-            </select>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table aria-label="Answer log">
-            <thead><tr><th>Fired at</th><th>Account</th><th>Event</th><th>Answer</th><th>Outcome</th><th class="num">Latency</th><th class="num">Retries</th><th>Error</th></tr></thead>
-            <tbody id="log-body"></tbody>
-          </table>
-        </div>
-      </section>
-
       <!-- ── Audit ─────────────────────────────────────────────────── -->
       <section class="view" id="view-audit" aria-labelledby="audit-title" hidden>
         <div class="view-head">
-          <div><h1 id="audit-title">Audit</h1><p>Who did what, when and from where. Sign-ins, changes and refusals, newest first. Old entries are removed automatically.</p></div>
+          <div><h1 id="audit-title">Audit</h1><p>Everything that happens: answers SpondBot sent, sign-ins, changes and refusals, newest first. Old entries are removed automatically.</p></div>
           <button type="button" class="btn" id="audit-export">Export CSV</button>
         </div>
         <div class="filters">
-          <div class="field grow"><label for="audit-q">Find</label><input class="input" id="audit-q" type="search" placeholder="User, action, target, IP or path" autocomplete="off" /></div>
+          <div class="field grow"><label for="audit-q">Find</label><input class="input" id="audit-q" type="search" placeholder="Member, user, action, event, IP or path" autocomplete="off" /></div>
           <div class="field">
             <label for="audit-category">Area</label>
             <select class="input" id="audit-category">
@@ -355,8 +329,8 @@
       </form>
     </dialog>
 
-    <script src="core.js?v=3"></script>
+    <script src="core.js?v=4"></script>
     <script src="app.js?v=9"></script>
-    <script src="admin.js?v=4"></script>
+    <script src="admin.js?v=5"></script>
   </body>
 </html>

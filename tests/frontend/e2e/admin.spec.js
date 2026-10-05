@@ -182,16 +182,6 @@ test.describe("admin panel", () => {
     await expect(row.getByRole("switch", { name: "Active" })).not.toBeChecked();
   });
 
-  test("log lists every attempt and filters by outcome", async ({ page }) => {
-    await page.goto("/admin#log");
-    const table = page.getByRole("table", { name: "Answer log" });
-    await expect(table.getByRole("row")).toHaveCount(4);
-    await expect(table).toContainText("Autumn tournament");
-    await expect(table).toContainText("41 ms");
-    await page.getByRole("combobox", { name: "Outcome" }).selectOption({ label: "Failed" });
-    await expect(table.getByRole("row")).toHaveCount(2);
-  });
-
   test("charts show the per-account breakdown", async ({ page }) => {
     await page.goto("/admin#charts");
     const table = page.getByRole("table", { name: "Per account" });
@@ -200,7 +190,7 @@ test.describe("admin panel", () => {
   });
 
   test("layout never scrolls sideways", async ({ page }) => {
-    for (const view of ["", "#timeline", "#users", "#log", "#charts"]) {
+    for (const view of ["", "#timeline", "#users", "#audit", "#charts"]) {
       // Same-page hash changes do not reload, so force a full load and let the view render.
       await page.goto("/admin" + view);
       await page.reload();

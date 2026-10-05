@@ -1,7 +1,7 @@
 /**
  * Admin panel.
  *
- * Views (hash routed: #queue, #timeline, #users, #log, #audit, #charts):
+ * Views (hash routed: #queue, #timeline, #users, #audit, #charts; the old #log opens #audit filtered to answers):
  *  - Queue     next-fire countdown, health counters, every account's events
  *              ordered by fire time with answer toggles, send-now / disarm / retry
  *  - Timeline  one lane per Spond account: registration opening -> event start
@@ -15,7 +15,7 @@
   const L = Core.CHOICE_LABELS;
   const SHORT = { accept: "ACC", decline: "DEC", manual: "MAN" };
   const CHOICES = ["accept", "decline", "manual"];
-  const VIEWS = ["queue", "timeline", "users", "log", "audit", "charts"];
+  const VIEWS = ["queue", "timeline", "users", "audit", "charts"];
   const AUDIT_PAGE = 100;
   const DAY = 24 * 3600e3;
 
@@ -75,7 +75,7 @@
   }
 
   function fillAccountSelects() {
-    for (const id of ["q-account", "log-account", "chart-account"]) {
+    for (const id of ["q-account", "chart-account"]) {
       const sel = $(id);
       const current = sel.value;
       sel.innerHTML = '<option value="">All accounts</option>' +
@@ -86,6 +86,12 @@
 
   /* ── Views ───────────────────────────────────────────────────────── */
   function showView(view) {
+    if (view === "log") {
+      // Old bookmark: the answer log now lives in the audit trail.
+      $("audit-category").value = "rsvp";
+      history.replaceState(null, "", "#audit");
+      view = "audit";
+    }
     if (!VIEWS.includes(view)) view = "queue";
     state.view = view;
     for (const v of VIEWS) $(`view-${v}`).hidden = v !== view;
@@ -96,7 +102,6 @@
     if (view === "queue") renderQueue();
     if (view === "timeline") renderTimeline();
     if (view === "users") loadUsersView();
-    if (view === "log") loadLog();
     if (view === "audit") loadAudit();
     if (view === "charts") loadCharts();
   }
@@ -587,33 +592,6 @@
     }
   }
 
-  /* ── Log ─────────────────────────────────────────────────────────── */
-  async function loadLog() {
-    const account = $("log-account").value;
-    const rows = await guarded(() => apiJson(`/admin/rsvp-log?limit=200${account ? `&user_id=${encodeURIComponent(account)}` : ""}`));
-    if (!rows) return;
-    const outcome = $("log-outcome").value;
-    const shown = outcome ? rows.filter((r) => r.outcome === outcome) : rows;
-    const badge = { success: '<span class="badge badge-ok">succeeded</span>', retry_success: '<span class="badge badge-sig">after retry</span>' };
-    $("log-body").innerHTML = shown.length
-      ? shown.map((r) => {
-          const ev = eventById(r.event_id);
-          const latency = r.submitted_at && ev?.invite_time ? Date.parse(r.submitted_at) - Date.parse(ev.invite_time) : null;
-          return `
-            <tr>
-              <td class="mono nowrap">${esc(Core.formatStamp(r.fired_at))}</td>
-              <td>${esc(nameOf(r.user_id))}</td>
-              <td>${ev ? `<span class="t-strong">${esc(ev.heading || "Untitled event")}</span>` : `<span class="mono t-dim">${esc(r.spond_event_id.slice(0, 12))}</span>`}</td>
-              <td>${esc(L[r.choice] || r.choice)}</td>
-              <td>${badge[r.outcome] || '<span class="badge badge-bad">failed</span>'}</td>
-              <td class="num mono">${latency != null ? `${latency} ms` : "–"}</td>
-              <td class="num mono">${r.retry_count}</td>
-              <td>${r.error_detail ? `<span class="t-err">${esc(r.error_detail)}</span>` : ""}</td>
-            </tr>`;
-        }).join("")
-      : '<tr><td colspan="8" class="empty-note">No answers logged for these filters yet.</td></tr>';
-  }
-
   /* ── Audit ───────────────────────────────────────────────────────── */
   const auditFilters = () => ({
     q: $("audit-q").value,
@@ -820,7 +798,6 @@
 
     for (const id of ["q-account", "q-state", "q-past"]) $(id).addEventListener("change", renderQueue);
     $("q-search").addEventListener("input", renderQueue);
-    for (const id of ["log-account", "log-outcome"]) $(id).addEventListener("change", loadLog);
     for (const id of ["audit-category", "audit-outcome", "audit-range"]) $(id).addEventListener("change", () => loadAudit());
     $("audit-q").addEventListener("input", () => {
       clearTimeout(auditSearchTimer);
@@ -883,7 +860,7 @@
         toast(`Answer ${d.outcome === "success" ? "sent" : "failed"}: ${d.heading} (${L[d.choice] || d.choice})`, d.outcome === "success" ? "success" : "error");
         refreshQueue();
         loadStats();
-        if (state.view === "log") loadLog();
+        if (state.view === "audit" && state.audit.items.length <= AUDIT_PAGE) loadAudit();
       },
       discovery_completed: () => { refreshQueue(); loadStats(); },
       scheduler_changed: () => loadJobs().then(() => { if (state.view === "queue") renderQueue(); }),

@@ -279,6 +279,15 @@
     const d = entry.details;
     if (!d || typeof d !== "object") return "";
     if (entry.action === "event.choice_set") return `${humanValue(d.from)} → ${humanValue(d.to)}`;
+    if (entry.action === "rsvp.sent" || entry.action === "rsvp.failed") {
+      const parts = [];
+      if (d.member) parts.push(d.member);
+      if (d.choice) parts.push(CHOICE_LABELS[d.choice] || d.choice);
+      if (typeof d.latency_ms === "number") parts.push(d.latency_ms < 0 ? `${-d.latency_ms} ms before opening` : `${d.latency_ms} ms after opening`);
+      if (d.retries) parts.push(d.retries === 1 ? "after 1 retry" : `after ${d.retries} retries`);
+      if (d.error) parts.push(d.error);
+      return parts.join(" · ");
+    }
     const parts = [];
     for (const [key, value] of Object.entries(d)) {
       if (key === "reason") parts.push(AUDIT_REASONS[value] || String(value).replace(/_/g, " "));

@@ -55,7 +55,12 @@ function defaultAudit() {
     auditEntry("l4", 30, "rsvp.sent", {
       actor_type: "system", actor_id: null, actor_username: null, actor_is_admin: null, ip: null, user_agent: null, method: null,
       path: null, status_code: null, request_id: null, target_type: "event", target_label: "Training, Hall B",
-      details: { choice: "accept", spond_user_id: "u1" },
+      details: { choice: "accept", member: "Felix Karg", spond_user_id: "u1", spond_event_id: "sp-e1", latency_ms: 41 },
+    }),
+    auditEntry("l8", 45, "rsvp.failed", {
+      actor_type: "system", actor_id: null, actor_username: null, actor_is_admin: null, ip: null, user_agent: null, method: null,
+      path: null, status_code: null, request_id: null, outcome: "failed", target_type: "event", target_label: "Autumn tournament",
+      details: { choice: "decline", member: "Mara Lind", spond_user_id: "u2", retries: 1, error: "Retry failed: 403 member not found" },
     }),
     auditEntry("l5", 180, "account.created", {
       actor_id: "a2", actor_username: "admin", actor_is_admin: true, target_type: "login", target_label: "mara", status_code: 201,
@@ -71,7 +76,7 @@ function defaultAudit() {
 function filterAudit(all, q) {
   const text = (q.get("q") || "").toLowerCase();
   return all.filter((e) =>
-    (!text || [e.action, e.actor_username, e.target_label, e.ip, e.path].some((v) => (v || "").toLowerCase().includes(text))) &&
+    (!text || [e.action, e.actor_username, e.target_label, e.ip, e.path, e.details && JSON.stringify(e.details)].some((v) => (v || "").toLowerCase().includes(text))) &&
     (!q.get("category") || e.category === q.get("category")) &&
     (!q.get("outcome") || e.outcome === q.get("outcome")) &&
     (!q.get("since") || Date.parse(e.occurred_at) >= Date.parse(q.get("since"))));

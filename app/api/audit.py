@@ -4,7 +4,7 @@
 GET /admin/audit              Filtered, newest first, cursor-paginated
 GET /admin/audit/export.csv   The same filters as a CSV download (up to 50,000 rows)
 
-Filters: q (free text), category, outcome, actor_id, since, until.
+Filters: q (free text over action, user, target, IP, path and details), category, outcome, actor_id, since, until.
 Reading the trail is not itself logged; exporting it is.
 """
 import csv
@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query, Response
-from sqlalchemy import and_, or_, select
+from sqlalchemy import String, and_, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminDep, DbDep
@@ -41,7 +41,7 @@ def _filtered(q, *, text, category, outcome, actor_id, since, until):
         q = q.where(or_(*[
             col.ilike(like, escape="\\")
             for col in (AuditLog.action, AuditLog.actor_username, AuditLog.target_label, AuditLog.target_id,
-                        AuditLog.ip, AuditLog.path)
+                        AuditLog.ip, AuditLog.path, cast(AuditLog.details, String))
         ]))
     if category:
         q = q.where(AuditLog.category == category)

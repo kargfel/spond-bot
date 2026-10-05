@@ -366,6 +366,19 @@ describe("audit helpers", () => {
     assert.equal(Core.auditDetails(entry({ details: { from: "accept", to: "decline" } })), "Going → Not going");
   });
 
+  test("answers the bot sent read like the old answer log", () => {
+    const sent = (d) => entry({ action: "rsvp.sent", actor_type: "system", details: d });
+    assert.equal(Core.auditDetails(sent({ member: "Mara Lind", choice: "accept", latency_ms: 41 })), "Mara Lind · Going · 41 ms after opening");
+    assert.equal(Core.auditDetails(sent({ member: "Mara Lind", choice: "decline", latency_ms: 112, retries: 1 })), "Mara Lind · Not going · 112 ms after opening · after 1 retry");
+    assert.equal(Core.auditDetails(sent({ choice: "accept", latency_ms: 90, retries: 3 })), "Going · 90 ms after opening · after 3 retries");
+    assert.equal(Core.auditDetails(sent({ choice: "accept", latency_ms: -12 })), "Going · 12 ms before opening");
+    assert.equal(Core.auditDetails(sent({ choice: "accept", latency_ms: 0 })), "Going · 0 ms after opening");
+    assert.equal(
+      Core.auditDetails(entry({ action: "rsvp.failed", details: { member: "Mara", choice: "accept", error: "403 member not found", latency_ms: null } })),
+      "Mara · Going · 403 member not found",
+    );
+  });
+
   test("reasons and changes are summarised", () => {
     assert.equal(Core.auditDetails(entry({ action: "auth.login.failed", details: { reason: "unknown_user" } })), "unknown user");
     assert.equal(Core.auditDetails(entry({ action: "auth.login.failed", details: { reason: "something_new" } })), "something new");

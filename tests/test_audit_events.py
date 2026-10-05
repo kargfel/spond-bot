@@ -302,11 +302,11 @@ async def test_the_bots_answers_are_recorded_as_system_events(world, monkeypatch
 
     ev = await _event(world, choice="accept", status="processed")
     ev.error_message = None
-    await executioner._notify_member(ev, "success")
+    await executioner._notify_member(ev, "success", None, world.spond)
     ev.status, ev.error_message = "failed", "Spond returned 403"
-    await executioner._notify_member(ev, "failed")
+    await executioner._notify_member(ev, "failed", None, world.spond)
 
     sent, failed = await rows(world.db)
     assert (sent.action, sent.actor_type, sent.outcome, sent.target_label) == ("rsvp.sent", "system", "success", "Training, Hall B")
-    assert sent.details == {"choice": "accept", "spond_user_id": str(world.spond.id)}
+    assert sent.details == {"choice": "accept", "member": "Felix Karg", "spond_user_id": str(world.spond.id), "spond_event_id": "SP-1"}
     assert (failed.action, failed.outcome, failed.details["error"]) == ("rsvp.failed", "failed", "Spond returned 403")
