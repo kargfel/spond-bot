@@ -27,7 +27,13 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 
 # Run database migrations then start the API server.
 # Using shell form so environment variable substitution works.
-# TRUSTED_PROXIES (comma-separated IPs or CIDRs) are the only peers whose X-Forwarded-For is
-# believed: it decides the client IP in the audit log and the rate limiter. The default "*"
-# trusts everyone, so anyone can fake their IP; set it to your reverse proxy's address.
+# TRUSTED_PROXIES is set through the environment, not here: write your reverse proxy's IP (or
+# network, e.g. 172.18.0.0/16; several separated by commas) into .env as
+#     TRUSTED_PROXIES=<proxy IP>
+# docker compose hands .env to the container. Only those peers' X-Forwarded-For is believed; it
+# decides the client IP in the audit log and the per-IP login limit.
+# The fallback "*" trusts everyone, so a visitor can fake their IP. It stays only so that existing
+# setups keep working until the proxy's IP is entered (behind a proxy on another host, 127.0.0.1
+# would make every visitor look like the proxy and share one login limit). The app logs a warning
+# at startup while TRUSTED_PROXIES is unset on a public domain. See docs/setup.md and DEPLOY.md.
 CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips \"${TRUSTED_PROXIES:-*}\" --log-level info"]

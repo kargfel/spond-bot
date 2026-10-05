@@ -104,22 +104,49 @@ async def test_a_header_set_by_a_handler_is_not_overwritten():
     assert h["content-security-policy"] == "default-src 'none'" and h["x-frame-options"] == "SAMEORIGIN"
 
 
+INLINE_SCRIPT = re.compile(r"<script(?![^>]*\bsrc\s*=)[^>]*>", re.IGNORECASE)
+INLINE_HANDLER = re.compile(r"\son[a-z]+\s*=", re.IGNORECASE)
+JS_URL = re.compile(r"javascript\s*:", re.IGNORECASE)
+
+
+@pytest.mark.parametrize("html,found", [
+    ("<script>alert(1)</script>", True),
+    ("<SCRIPT>alert(1)</SCRIPT>", True),          # upper case is still a script
+    ("<ScRiPt type='module'>x</ScRiPt>", True),
+    ("<script src=\"app.js\"></script>", False),
+    ("<SCRIPT SRC=\"app.js\"></SCRIPT>", False),
+    ("<script defer src = \"app.js\"></script>", False),
+])
+def test_the_inline_script_check_is_case_insensitive(html, found):
+    assert bool(INLINE_SCRIPT.search(html)) is found
+
+
+@pytest.mark.parametrize("html,found", [
+    ('<a onclick="x()">', True), ("<a ONCLICK = 'x()'>", True), ("<img onerror=x>", True),
+    ('<a class="button" href="/x">', False), ("<p>one = two</p>", False),
+])
+def test_the_inline_handler_check_is_case_insensitive(html, found):
+    assert bool(INLINE_HANDLER.search(html)) is found
+
+
 def test_the_site_never_needs_an_inline_script_or_handler():
     """The policy forbids them, so none may exist in the pages (or the policy would silently break them)."""
     from pathlib import Path
 
-    for page in Path("frontend").glob("*.html"):
+    pages = list(Path("frontend").glob("*.html"))
+    assert len(pages) >= 4
+    for page in pages:
         html = page.read_text()
-        assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", html), f"{page.name} has an inline <script>"
-        assert not re.search(r"\son[a-z]+\s*=", html), f"{page.name} has an inline event handler"
-        assert "javascript:" not in html, page.name
+        assert not INLINE_SCRIPT.search(html), f"{page.name} has an inline <script>"
+        assert not INLINE_HANDLER.search(html), f"{page.name} has an inline event handler"
+        assert not JS_URL.search(html), f"{page.name} has a javascript: URL"
 
 
 def test_remote_scripts_are_pinned_with_integrity_hashes():
     from pathlib import Path
 
     for page in Path("frontend").glob("*.html"):
-        for tag in re.findall(r"<script[^>]*\ssrc=\"https?://[^>]*>", page.read_text()):
+        for tag in re.findall(r"<script[^>]*\ssrc=\"https?://[^>]*>", page.read_text(), re.IGNORECASE):
             assert "integrity=" in tag and "crossorigin" in tag, tag
 
 
