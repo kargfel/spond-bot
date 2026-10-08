@@ -2,8 +2,10 @@
  * Admin panel.
  *
  * Views (hash routed: #queue, #timeline, #users, #audit, #charts; the old #log opens #audit filtered to answers):
- *  - Queue     next-fire countdown, health counters, every account's events
- *              ordered by fire time with answer toggles, send-now / disarm / retry
+ *  - Queue     next-fire countdown, health counters and the events in four blocks (needs attention,
+ *              answered in the last 48 h, coming up, earlier) with answer toggles, send-now / disarm /
+ *              retry. It loads a window (2 days back, 60 days ahead, plus recent failures); older
+ *              events are fetched on request, 100 at a time.
  *  - Timeline  one lane per Spond account: registration opening -> event start
  *  - Users     dashboard logins and Spond accounts
  *  - Log       RSVP audit log
@@ -18,6 +20,8 @@
   const VIEWS = ["queue", "timeline", "users", "audit", "charts"];
   const AUDIT_PAGE = 100;
   const DAY = 24 * 3600e3;
+  const OLDER_PAGE = 100;
+  const RANGE_MS = { "2d": null, "7d": 7 * DAY, "30d": 30 * DAY, all: Infinity };
 
   const state = {
     me: null,
@@ -25,7 +29,9 @@
     spondUsers: [],
     accounts: [],
     invites: [],
-    events: [],
+    events: [],          // what the pages show: core + older
+    core: [],            // the loaded window plus recent failures
+    older: { items: [], hasMore: false, loading: false, key: "" },
     jobs: [],
     stats: null,
     selectedEvent: null,
@@ -57,9 +63,65 @@
     state.spondUsers = (await guarded(() => apiJson("/spond-accounts"))) || [];
     fillAccountSelects();
   }
-  async function loadEvents() {
-    state.events = (await guarded(() => apiJson("/events?all=true"))) || state.events;
+  /** Start of the loaded window: midnight two days ago, the same left edge the timeline draws. */
+  function windowFrom() {
+    const d = new Date(Date.now() - Core.QUEUE_PAST_MS);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
   }
+  const isoTime = (t) => new Date(t).toISOString();
+  const query = (o) => new URLSearchParams(o).toString();
+
+  function rebuildEvents() {
+    const seen = new Set();
+    state.events = [...state.core, ...state.older.items].filter((e) => !seen.has(e.id) && seen.add(e.id));
+  }
+  function replaceEvent(updated) {
+    const swap = (list) => list.map((e) => (e.id === updated.id ? updated : e));
+    state.core = swap(state.core);
+    state.older.items = swap(state.older.items);
+    rebuildEvents();
+  }
+
+  /** The window around today, plus failures from the last 30 days that are older than it. */
+  async function loadEvents() {
+    const from = windowFrom();
+    const [window_, failed] = await Promise.all([
+      guarded(() => apiJson(`/events?${query({ all: "true", order: "start", start_from: isoTime(from), start_to: isoTime(Date.now() + Core.QUEUE_AHEAD_MS) })}`)),
+      guarded(() => apiJson(`/events?${query({ all: "true", status: "failed", order: "-start", start_from: isoTime(Date.now() - Core.QUEUE_FAILED_MS), start_to: isoTime(from) })}`)),
+    ]);
+    if (!window_ || !failed) return;       // keep what is on screen rather than half an answer
+    state.core = [...window_, ...failed];
+    rebuildEvents();
+  }
+
+  /** Events from before the window, newest first, when the Show filter asks for them. */
+  async function loadOlder(more = false) {
+    const range = $("q-range").value;
+    const account = $("q-account").value;
+    const key = `${range}|${account}`;
+    if (range === "2d") {
+      state.older = { items: [], hasMore: false, loading: false, key: "" };
+      rebuildEvents();
+      return;
+    }
+    if (!more && state.older.key === key) return;            // already loaded for this filter
+    if (!more) state.older = { items: [], hasMore: false, loading: false, key };
+    state.older.loading = true;
+    renderQueueFoot();
+    const params = { all: "true", order: "-start", limit: OLDER_PAGE, offset: state.older.items.length, start_to: isoTime(windowFrom()) };
+    if (RANGE_MS[range] !== Infinity) params.start_from = isoTime(Date.now() - RANGE_MS[range]);
+    if (account) params.user_id = account;
+    const page = await guarded(() => apiJson(`/events?${query(params)}`));
+    if (state.older.key !== key) return;                     // the filter changed while loading
+    state.older.loading = false;
+    if (page) {
+      state.older.items = [...state.older.items, ...page];
+      state.older.hasMore = page.length === OLDER_PAGE;
+    }
+    rebuildEvents();
+  }
+
   async function loadJobs() {
     state.jobs = (await guarded(() => apiJson("/admin/scheduler"))) || state.jobs;
   }
@@ -175,22 +237,33 @@
     const account = $("q-account").value;
     const want = $("q-state").value;
     const q = $("q-search").value.trim().toLowerCase();
-    const includePast = $("q-past").checked;
+    const range = $("q-range").value;
+    const cutoff = range === "all" ? -Infinity : range === "2d" ? windowFrom() : now - RANGE_MS[range];
 
     const rows = Core.buildQueue(state.events, state.jobs, state.spondUsers, now).filter((r) =>
-      (includePast || !isPast(r.event)) &&
+      (r.group === "attention" || (Date.parse(r.event.start_timestamp) || Date.parse(r.event.invite_time) || Infinity) >= cutoff) &&
       (!account || r.event.user_id === account) &&
       (!want || r.state === want) &&
       (!q || (r.event.heading || "").toLowerCase().includes(q) || r.userName.toLowerCase().includes(q)),
     );
+    renderQueueFoot();
 
     if (!rows.length) {
       $("queue-body").innerHTML = `<tr><td colspan="8" class="empty-note">No events match these filters.</td></tr>`;
       return;
     }
+    const counts = {};
+    for (const r of rows) counts[r.group] = (counts[r.group] || 0) + 1;
+    let lastGroup = null;
     $("queue-body").innerHTML = rows.map((r) => {
       const e = r.event;
-      const past = r.state === "sent" || isPast(e);
+      let head = "";
+      if (r.group !== lastGroup) {
+        lastGroup = r.group;
+        const g = Core.QUEUE_GROUPS.find((x) => x.key === r.group);
+        head = `<tr class="group-row" data-testid="queue-group" data-group="${g.key}"><th colspan="8" scope="colgroup">${esc(g.label)} <span class="count">${counts[g.key]}</span></th></tr>`;
+      }
+      const past = r.group === "earlier" || (r.state === "sent" && r.group !== "recent");
       const fire = r.job?.fire_at || e.invite_time;
       const until = fire ? Date.parse(fire) - now : null;
       const inCell = until == null ? "–"
@@ -204,7 +277,7 @@
       if (r.state === "failed" && Core.retryPayload(e)) {
         actions.push(`<button type="button" class="btn btn-small btn-sig" data-retry="${esc(e.id)}">Retry</button>`);
       }
-      return `
+      return `${head}
         <tr data-testid="queue-row" class="${past ? "row-past" : ""}">
           <td class="c-fa mono nowrap">${fire ? esc(Core.formatStamp(fire)) : "–"}</td>
           <td class="c-in mono nowrap">${inCell}</td>
@@ -219,12 +292,31 @@
     }).join("");
   }
 
+  function renderQueueFoot() {
+    const range = $("q-range").value;
+    const note = $("queue-note");
+    const more = $("queue-more");
+    if (range === "2d") {
+      note.textContent = "Showing the last 2 days and the next 60 days, plus failures from the last 30 days. Choose a longer range above for earlier events.";
+      more.hidden = true;
+      return;
+    }
+    const n = state.older.items.length;
+    note.textContent = state.older.loading && !n ? "Loading earlier events…"
+      : `${n} earlier event${n === 1 ? "" : "s"} loaded${state.older.hasMore ? "" : ", that is all of them"}. Search and filters cover the loaded events.`;
+    more.hidden = !state.older.hasMore;
+    more.disabled = state.older.loading;
+    more.textContent = state.older.loading ? "Loading…" : "Show more";
+  }
+
+  const renderTimelineIfShown = () => { if (state.view === "timeline") renderTimeline(); };
+
   async function setChoice(id, choice) {
     const ev = eventById(id);
     if (!ev || ev.user_choice === choice) return;
     const updated = await guarded(() => apiJson(`/events/${id}`, "PATCH", { user_choice: choice }));
     if (!updated) return;
-    state.events = state.events.map((e) => (e.id === id ? updated : e));
+    replaceEvent(updated);
     toast(`${ev.heading || "Event"} (${nameOf(ev.user_id)}): ${L[choice]}`, "success");
     renderQueue();
     if (state.view === "timeline") renderTimeline();
@@ -237,7 +329,7 @@
     if (!payload) return;
     const updated = await guarded(() => apiJson(`/events/${id}`, "PATCH", payload));
     if (!updated) return;
-    state.events = state.events.map((e) => (e.id === id ? updated : e));
+    replaceEvent(updated);
     toast(`${ev.heading || "Event"}: queued for another attempt.`, "success");
     renderQueue();
     loadStats();
@@ -479,7 +571,9 @@
     if (!ok) return;
     if ((await guarded(() => apiJson(`/spond-accounts/${id}`, "DELETE"))) !== FAILED) {
       state.spondUsers = state.spondUsers.filter((x) => x.id !== id);
-      state.events = state.events.filter((e) => e.user_id !== id);
+      state.core = state.core.filter((e) => e.user_id !== id);
+      state.older.items = state.older.items.filter((e) => e.user_id !== id);
+      rebuildEvents();
       fillAccountSelects();
       renderUsers();
       toast(`${u.display_name} deleted.`, "success");
@@ -801,7 +895,11 @@
     $("sync-btn").addEventListener("click", sync);
     window.addEventListener("hashchange", () => showView(location.hash.slice(1)));
 
-    for (const id of ["q-account", "q-state", "q-past"]) $(id).addEventListener("change", renderQueue);
+    $("q-state").addEventListener("change", renderQueue);
+    for (const id of ["q-account", "q-range"]) {
+      $(id).addEventListener("change", async () => { renderQueue(); await loadOlder(); renderQueue(); renderTimelineIfShown(); });
+    }
+    $("queue-more").addEventListener("click", async () => { await loadOlder(true); renderQueue(); });
     $("q-search").addEventListener("input", renderQueue);
     for (const id of ["audit-category", "audit-outcome", "audit-range"]) $(id).addEventListener("change", () => loadAudit());
     $("audit-q").addEventListener("input", () => {

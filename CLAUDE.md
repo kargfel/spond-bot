@@ -119,6 +119,8 @@ Frontend changes are test-driven. `npm install` once, then:
   (`tests/frontend/e2e/fixtures.js`); desktop and phone viewports; no backend needed.
   Set `PW_CHROMIUM_PATH` to use a preinstalled Chromium.
 
+**Loading is windowed, never "everything".** `GET /events` takes `start_from`, `start_to`, `order` (`invite` | `start` | `-start`), `limit`, `offset`. The admin queue loads 2 days back (from midnight) to 60 days ahead plus failures of the last 30 days, and earlier events only on request (Show filter, 100 per page); the member dashboard loads every upcoming event and the Past tab on demand, 30 per page. A short page means "no more". The queue's four blocks (needs attention, answered in the last 48 h, coming up, earlier) come from `Core.buildQueue`. New list views must page; the events table grows every week.
+
 Member-facing labels: `accept`/`decline`/`manual` are shown as Going / Not going / Leave to me.
 
 ## Security conventions

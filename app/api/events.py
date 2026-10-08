@@ -12,10 +12,12 @@ GET    /health                 Health check (public)
 """
 import logging
 import uuid
+from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DbDep
@@ -27,6 +29,11 @@ from app.workers.scheduler import get_scheduler
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Events"])
+
+
+def _utc(value: datetime) -> datetime:
+    """A time from a query string: without an offset it means UTC."""
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
 def _assert_event_access(event: Event, current_user: dict) -> None:
@@ -53,6 +60,13 @@ async def list_events(
     status_filter: str | None = Query(None, alias="status"),
     choice: str | None = Query(None),
     all: bool = Query(False, description="Fetch all users' events (admin only)"),
+    start_from: datetime | None = Query(
+        None, description="Only events starting at or after this time (events without a start time count as upcoming)"),
+    start_to: datetime | None = Query(None, description="Only events starting before this time"),
+    order: Literal["invite", "start", "-start"] = Query(
+        "invite", description="Sort by registration opening (default), start time, or start time newest first"),
+    limit: int | None = Query(None, ge=1, le=1000, description="Page size; omit for everything"),
+    offset: int = Query(0, ge=0),
 ):
     """
     Returns events visible to the caller.
@@ -61,6 +75,10 @@ async def list_events(
     or pass `all=true` to fetch all users' events. For safety in dashboard views,
     if an admin doesn't explicitly pass `all=true` or `user_id`, they only see their own events.
     Non-admin users always get only their own events regardless of `user_id`.
+
+    `start_from` / `start_to` / `limit` / `offset` let a page ask for just the slice it shows
+    (the admin queue loads a window around today, "past" is loaded in pages): the table grows by
+    several events per week and member, so "everything" gets slower every month.
     """
     q = select(Event)
 
@@ -78,7 +96,22 @@ async def list_events(
         q = q.where(Event.status == status_filter)
     if choice:
         q = q.where(Event.user_choice == choice)
-    q = q.order_by(Event.invite_time.asc().nullslast())
+    if start_from:
+        after = Event.start_timestamp >= _utc(start_from)
+        # Without an upper bound this is "upcoming": an event with no start time is not past.
+        q = q.where(after if start_to else or_(after, Event.start_timestamp.is_(None)))
+    if start_to:
+        q = q.where(Event.start_timestamp < _utc(start_to))
+    if order == "start":
+        q = q.order_by(Event.start_timestamp.asc().nullslast(), Event.id)
+    elif order == "-start":
+        q = q.order_by(Event.start_timestamp.desc().nullslast(), Event.id)
+    else:
+        q = q.order_by(Event.invite_time.asc().nullslast(), Event.id)
+    if limit:
+        q = q.limit(limit).offset(offset)
+    elif offset:
+        q = q.offset(offset)
 
     result = await db.execute(q)
     return result.scalars().all()

@@ -5,17 +5,23 @@
  * undecided event at a time) next to a day-grouped agenda with a segmented
  * Going / Not going / Leave to me control per event.
  *
+ * Loading: every upcoming event up front; the Past tab only when it is opened, newest first,
+ * 30 at a time ("Load older"), so a long history never slows the page down.
+ *
  * Depends on core.js (Core) and app.js (api helpers, dialogs, toasts).
  */
 (function () {
   const L = Core.CHOICE_LABELS;
   const CHOICES = ["accept", "decline", "manual"];
   const RELOAD_MS = 5 * 60e3;
+  const PAST_PAGE = 30;
 
   const state = {
     me: null,
     spondUser: null,
-    events: [],
+    events: [],          // upcoming + the past pages loaded so far
+    upcoming: [],
+    past: { items: [], hasMore: false, loading: false, loaded: false },
     loaded: false,
     tab: "upcoming",
     inboxIndex: 0,
@@ -28,9 +34,18 @@
   const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
   /* ── Data ────────────────────────────────────────────────────────── */
+  const query = (o) => new URLSearchParams(o).toString();
+
+  function rebuildEvents() {
+    const seen = new Set();
+    state.events = [...state.upcoming, ...state.past.items].filter((e) => !seen.has(e.id) && seen.add(e.id));
+  }
+
+  /** Everything that has not started yet (no limit: a member's upcoming list is short). */
   async function loadEvents() {
     try {
-      state.events = await apiJson("/events");
+      state.upcoming = await apiJson(`/events?${query({ start_from: new Date().toISOString(), order: "start" })}`);
+      rebuildEvents();
       state.loaded = true;
       render();
     } catch (err) {
@@ -40,8 +55,33 @@
     }
   }
 
+  /** Events that already started, newest first. The first page comes with the first visit to the tab. */
+  async function loadPast(more = false) {
+    if (state.past.loading || (!more && state.past.loaded)) return;
+    state.past.loading = true;
+    render();
+    try {
+      const page = await apiJson(`/events?${query({
+        start_to: new Date().toISOString(), order: "-start", limit: PAST_PAGE, offset: state.past.items.length,
+      })}`);
+      state.past.items = [...state.past.items, ...page];
+      state.past.hasMore = page.length === PAST_PAGE;
+      state.past.loaded = true;
+      rebuildEvents();
+    } catch (err) {
+      if (err.status === 401) { window.location.href = "/"; return; }
+      toast(`Could not load past events. ${err.message}`, "error", 6000);
+    } finally {
+      state.past.loading = false;
+      render();
+    }
+  }
+
   function replaceEvent(updated) {
-    state.events = state.events.map((e) => (e.id === updated.id ? updated : e));
+    const swap = (list) => list.map((e) => (e.id === updated.id ? updated : e));
+    state.upcoming = swap(state.upcoming);
+    state.past.items = swap(state.past.items);
+    rebuildEvents();
   }
 
   async function setChoice(id, choice) {
@@ -226,6 +266,10 @@
   function renderAgenda(list, now) {
     $("agenda").hidden = false;
     const isPast = state.tab === "past";
+    if (isPast && !state.past.loaded) {
+      $("agenda-list").innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
+      return;
+    }
     if (!list.length) {
       $("agenda-list").innerHTML = isPast
         ? '<div class="empty"><b>No past events</b>Events move here once they have started.</div>'
@@ -253,7 +297,9 @@
               </div>`;
           }).join("")}</div>
         </section>`;
-    }).join("");
+    }).join("") + (isPast && state.past.hasMore
+      ? `<div class="load-more"><button type="button" class="btn" data-more data-testid="past-more" ${state.past.loading ? "disabled" : ""}>${state.past.loading ? "Loading…" : "Load older events"}</button></div>`
+      : "");
   }
 
   function refreshRelativeTimes() {
@@ -272,6 +318,7 @@
     }
     $("agenda-list").setAttribute("aria-labelledby", `tab-${name}`);
     render();
+    if (name === "past") loadPast();
   }
 
   /* ── Account dialogs ─────────────────────────────────────────────── */
@@ -500,6 +547,7 @@
     document.querySelector(".page").addEventListener("click", (e) => {
       const choice = e.target.closest("[data-choice]");
       if (choice) return setChoice(choice.dataset.id, choice.dataset.choice);
+      if (e.target.closest("[data-more]")) return loadPast(true);
       const retryBtn = e.target.closest("[data-retry]");
       if (retryBtn) return retry(retryBtn.dataset.retry);
       if (e.target.closest("[data-later]")) {

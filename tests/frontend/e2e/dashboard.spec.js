@@ -107,6 +107,62 @@ test.describe("member dashboard", () => {
     await expect(row(page, "League match vs. TSV Nord")).toBeVisible();
   });
 
+  const exact = (page, title) => page.getByTestId("agenda-row").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+
+  const pastEvents = (api, count) => {
+    for (let i = 1; i <= count; i++) {
+      const start = Date.parse("2026-09-20T18:00:00Z") - i * 864e5;
+      api.state.events.push({ id: `p${i}`, spond_event_id: `sp-p${i}`, user_id: "u1", heading: `Past ${i}`,
+        start_timestamp: new Date(start).toISOString(), invite_time: new Date(start - 7 * 864e5).toISOString(), rsvp_date: null,
+        user_choice: "accept", status: "processed", error_message: null, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" });
+    }
+  };
+
+  test("upcoming events load first and in full; the past is not requested until the tab is opened", async ({ page, api }) => {
+    pastEvents(api, 200);
+    await page.goto("/dashboard");
+    await expect(row(page, "League match vs. TSV Nord")).toBeVisible();
+    const calls = api.callsTo("GET", "/events");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].query.start_from).toBeTruthy();
+    expect(calls[0].query.limit).toBeUndefined();                     // every upcoming event, no cap
+    expect(calls[0].query.start_to).toBeUndefined();
+  });
+
+  test("past events arrive newest first, 30 at a time, on request", async ({ page, api }) => {
+    pastEvents(api, 70);
+    await page.goto("/dashboard");
+    await page.getByRole("tab", { name: "Past" }).click();
+    await expect(exact(page, "Past 1")).toBeVisible();                  // the most recent one
+    await expect(row(page, "Old friendly match")).toBeVisible();           // the fixture's own past event is the newest of all
+    await expect(exact(page, "Past 29")).toBeVisible();                    // 30 per page: that one plus Past 1 to 29
+    await expect(exact(page, "Past 30")).toHaveCount(0);
+    const rows = page.getByTestId("agenda-row");
+    const first = await rows.count();
+    await page.getByTestId("past-more").click();
+    await expect(exact(page, "Past 59")).toBeVisible();
+    await expect(exact(page, "Past 60")).toHaveCount(0);
+    await page.getByTestId("past-more").click();
+    await expect(exact(page, "Past 70")).toBeVisible();
+    await expect(page.getByTestId("past-more")).toHaveCount(0);       // nothing left to load
+    expect(await rows.count()).toBeGreaterThan(first);
+    const pages = api.callsTo("GET", "/events").filter((c) => c.query.order === "-start");
+    expect(pages.map((c) => [c.query.limit, c.query.offset])).toEqual([["30", "0"], ["30", "30"], ["30", "60"]]);
+    // Switching tabs does not fetch again
+    await page.getByRole("tab", { name: "Upcoming" }).click();
+    await page.getByRole("tab", { name: "Past" }).click();
+    expect(api.callsTo("GET", "/events").filter((c) => c.query.order === "-start")).toHaveLength(3);
+  });
+
+  test("an answer given on a past event keeps working across pages", async ({ page, api }) => {
+    pastEvents(api, 35);
+    await page.goto("/dashboard");
+    await page.getByRole("tab", { name: "Past" }).click();
+    await page.getByTestId("past-more").click();
+    await expect(exact(page, "Past 35")).toBeVisible();
+    await expect(exact(page, "Past 35")).toContainText("Going");        // shown as the saved choice, no controls on the past
+  });
+
   test("profile: update the display name", async ({ page, api }) => {
     await page.goto("/dashboard");
     await page.getByRole("button", { name: "Account" }).click();
