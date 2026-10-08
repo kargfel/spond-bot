@@ -54,6 +54,7 @@ TZ=Europe/Berlin
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | `admin` / `changeme` | Admin login seeded on first start if no admin exists |
 | `DISCOVERY_INTERVAL_MINUTES` | `60` | How often events are synced from Spond |
 | `EXECUTIONER_INTERVAL_SECONDS` | `60` | How often the fallback executioner looks for due answers |
+| `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | `30` / `20` | Database connections kept ready / allowed on top. Answers for one opening are written at the same moment, so keep the pool at least as large as your busiest group of members (Postgres allows 100 connections by default). The pool is warmed shortly before each opening |
 | `RSVP_LEAD_TIME_MS` | `0` | Fire this many milliseconds *before* registration opens, to offset network latency. Spond may reject answers that arrive before opening, so raise it carefully and watch the answer log |
 | `TZ` | `Europe/Berlin` | Scheduler and log timezone |
 | `VAPID_PRIVATE_KEY` | empty (push off) | Signs Web Push notifications. Generate with `python scripts/generate_vapid_key.py`. Keep it: a new key invalidates every device's notification subscription |

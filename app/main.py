@@ -7,6 +7,7 @@ Lifecycle:
 
 API docs are available at /docs (Swagger UI) and /redoc.
 """
+import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -21,6 +22,7 @@ from sqlalchemy import select
 
 from app.api import accounts as accounts_router
 from app.api.deps import AdminDep
+from app.database import warm_pool
 from app.api import admin as admin_router
 from app.api import audit as audit_router
 from app.api import auth as auth_router
@@ -124,7 +126,9 @@ async def lifespan(app: FastAPI):
     await _seed_admin()
     start_scheduler()
     await reschedule_pending_snipers()
+    warm_task = asyncio.create_task(warm_pool())  # off the startup path; the app is usable meanwhile
     yield
+    warm_task.cancel()
     logger.info("Shutting down...")
     shutdown_scheduler()
     from app.database import engine

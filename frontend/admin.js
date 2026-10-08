@@ -313,23 +313,28 @@
             <div class="tl-track" data-testid="lane" aria-label="${esc(lane.name)}">
               <span class="visually-hidden">${esc(lane.name)}</span>
               ${grid}<i class="tl-now" style="left:${pct(now)}%"></i>
-              ${visible.map((e) => marker(e, pct, now)).join("")}
+              ${visible.map((e) => marker(e, pct, now, inRange)).join("")}
             </div>`;
         }).join("")}
       </div>`;
     renderDetail();
   }
 
-  function marker(e, pct, now) {
+  function marker(e, pct, now, inRange) {
     const s = Core.eventState(e, now);
+    // pct() clamps to the axis. A time outside the window must not be drawn as if it sat on the
+    // edge (a registration opened last week is not "at the left border"): only the dotted
+    // link, clipped to the window, shows that the event is still ahead.
+    const inviteShown = inRange(Date.parse(e.invite_time));
+    const startShown = inRange(Date.parse(e.start_timestamp));
     const invite = e.invite_time ? pct(e.invite_time) : null;
     const startP = e.start_timestamp ? pct(e.start_timestamp) : null;
     const label = `${e.heading || "Untitled event"}: registration opens ${e.invite_time ? `${Core.formatDay(e.invite_time)}, ${Core.formatTime(e.invite_time)}` : "unknown"}, answer ${L[e.user_choice]}, ${Core.STATE_LABELS[s]}`;
     const link = invite != null && startP != null
       ? `<i class="tl-link m-${s}" style="left:${invite}%;width:${Math.max(0, startP - invite)}%"></i>` : "";
-    const mark = invite != null
+    const mark = invite != null && inviteShown
       ? `<button type="button" class="tl-mark m-${s}" style="left:${invite}%" data-mark="${esc(e.id)}" aria-label="${esc(label)}" aria-pressed="${state.selectedEvent === e.id}" title="${esc(label)}"></button>` : "";
-    const block = startP != null ? `<i class="tl-event c-${e.user_choice}" style="left:${startP}%" title="${esc(`${e.heading}: ${Core.formatDay(e.start_timestamp)} ${Core.formatTime(e.start_timestamp)}`)}"></i>` : "";
+    const block = startP != null && startShown ? `<i class="tl-event c-${e.user_choice}" style="left:${startP}%" title="${esc(`${e.heading}: ${Core.formatDay(e.start_timestamp)} ${Core.formatTime(e.start_timestamp)}`)}"></i>` : "";
     return link + block + mark;
   }
 
