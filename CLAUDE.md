@@ -165,6 +165,8 @@ At invite_time:
 
 Retries: a 401 re-logs in and retries once at once; 5xx/429/timeouts/connection errors follow a ladder (50 ms … 2 s) for up to 20 s; other 4xx get 3 quick retries (covers firing a few ms early). The recipient ID is reused across attempts. `rsvp.sent`/`rsvp.failed` audit details carry `fire_ms`, `prep_ms`, `request_ms`, `response_ms`, `attempts` (ms relative to registration opening).
 
+Fast path: the warmup (10 s before) leaves a `_Prepared` per event in `executioner._PREPARED` — fresh-checked token, member ID and an open HTTPS connection (`GET /profile` proves the token). `run_sniper` re-reads the event and uses it only if choice and `invite_time` still match; otherwise it is dropped and the normal path runs. Only the first attempt uses it; retries open fresh sessions. Unused ones are closed by `cancel_sniper` and by the executioner sweep (120 s). Audit details carry `prepared: true/false`. Any failure to prepare just means the normal path.
+
 ## Event Status / Choice Values
 
 | Field | Values |

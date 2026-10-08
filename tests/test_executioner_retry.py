@@ -104,6 +104,6 @@ def test_phase_timings_are_relative_to_opening():
     ev = MagicMock(invite_time=opened)
     t = {"first_sent_at": ms(12), "request_ms": 88, "done_at": ms(100), "attempts": 2}
     assert _phase_timings(log, ev, t) == {
-        "fire_ms": -3, "prep_ms": 15, "request_ms": 88, "response_ms": 100, "attempts": 2,
+        "fire_ms": -3, "prep_ms": 15, "request_ms": 88, "response_ms": 100, "attempts": 2, "prepared": False,
     }
     assert _phase_timings(log, ev, None) == {}
