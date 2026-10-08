@@ -138,7 +138,7 @@ async def test_sniper_waits_for_the_exact_instant_then_takes_data_prepared_meanw
     with patch.object(executioner.spond_client, "rsvp", rsvp), \
          patch.object(executioner, "_process_event", new_callable=AsyncMock):
         await task
-    assert sent_at and sent_at[0] >= fire_at - timedelta(milliseconds=2)
+    assert sent_at and sent_at[0] >= fire_at          # never early
     assert (sent_at[0] - fire_at) < timedelta(milliseconds=50)
 
 
@@ -306,3 +306,20 @@ async def test_open_prepared_never_raises_and_stores_nothing_on_failure():
                       side_effect=OSError("no route")):
         await executioner._open_prepared(AsyncMock(), MagicMock(), ev, "tok", "M-1")
     assert ev.id not in executioner._PREPARED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ahead_ms", [0, 1, 5, 40])
+async def test_waiting_never_returns_before_the_instant_and_is_precise(ahead_ms):
+    when = datetime.now(timezone.utc) + timedelta(milliseconds=ahead_ms)
+    await executioner._sleep_until(when)
+    late = (datetime.now(timezone.utc) - when).total_seconds() * 1000
+    assert late >= 0                       # not a microsecond early
+    assert late < 25                       # and close (generous for loaded CI machines)
+
+
+@pytest.mark.asyncio
+async def test_an_instant_in_the_past_returns_at_once():
+    started = time.monotonic()
+    await executioner._sleep_until(datetime.now(timezone.utc) - timedelta(seconds=5))
+    assert time.monotonic() - started < 0.05

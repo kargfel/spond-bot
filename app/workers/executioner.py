@@ -64,6 +64,8 @@ _PREPARED_MAX_AGE_S = 120.0
 # The sniper job starts this long before the opening and then waits for the exact instant on the
 # event loop's clock. Scheduler wake-up and job dispatch jitter (tens of ms) is spent here, not after.
 _SNIPER_HEADSTART_S = 0.25
+# The last stretch before the exact instant is spent checking the clock instead of sleeping.
+_SPIN_S = 0.002
 # Events a sniper is working on right now. The one-minute executioner leaves them alone, so it
 # neither competes for database connections nor races the sniper for the claim.
 _INFLIGHT: set[_uuid.UUID] = set()
@@ -560,9 +562,18 @@ def cancel_sniper(scheduler: AsyncIOScheduler, event_id: _uuid.UUID) -> None:
 
 
 async def _sleep_until(when: datetime) -> None:
-    remaining = (_aware(when) - datetime.now(timezone.utc)).total_seconds()
-    if remaining > 0:
-        await asyncio.sleep(remaining)
+    """Return at `when`, never before it (by this machine's clock).
+
+    One long sleep would end up to a millisecond early or late (timer rounding, wall clock vs the
+    loop's monotonic clock), so it stops short and the last couple of milliseconds are spent
+    yielding to the loop while the wall clock is checked.
+    """
+    target = _aware(when)
+    remaining = (target - datetime.now(timezone.utc)).total_seconds()
+    if remaining > _SPIN_S:
+        await asyncio.sleep(remaining - _SPIN_S)
+    while datetime.now(timezone.utc) < target:
+        await asyncio.sleep(0)
 
 
 async def run_sniper(event_id: _uuid.UUID, fire_at: datetime | None = None) -> None:
