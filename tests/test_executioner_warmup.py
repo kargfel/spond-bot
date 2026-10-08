@@ -142,8 +142,8 @@ def test_cancel_warmup_removes_job():
 
 
 @pytest.mark.asyncio
-async def test_submit_rsvp_force_refresh_bypasses_cache():
-    """_submit_rsvp with force_refresh=True must bypass cache and fetch from API."""
+async def test_submit_rsvp_force_refresh_keeps_cached_recipient():
+    """A forced re-login must not repeat the getBulk + /groups lookups: the member ID is token-independent."""
     mock_db = AsyncMock()
     mock_user = MagicMock()
     mock_user.display_name = "RefreshUser"
@@ -151,18 +151,19 @@ async def test_submit_rsvp_force_refresh_bypasses_cache():
     mock_user.login = "refresh@example.com"
 
     with patch("app.workers.executioner.ensure_fresh_token",
-               new_callable=AsyncMock, return_value="tok"), \
-         patch("app.workers.executioner.spond_client.get_bulk_events",
-               new_callable=AsyncMock, return_value=[{"id": "EVT-R-001"}]) as mock_bulk, \
-         patch("app.workers.executioner.spond_client.resolve_recipient_id",
-               new_callable=AsyncMock, return_value="RECIP-R") as mock_resolve, \
-         patch("app.workers.executioner.spond_client.rsvp", new_callable=AsyncMock):
+               new_callable=AsyncMock, return_value="tok") as mock_token, \
+         patch("app.workers.executioner.spond_client.get_bulk_events", new_callable=AsyncMock) as mock_bulk, \
+         patch("app.workers.executioner.spond_client.resolve_recipient_id", new_callable=AsyncMock) as mock_resolve, \
+         patch("app.workers.executioner.spond_client.rsvp", new_callable=AsyncMock) as mock_rsvp:
         from app.workers.executioner import _submit_rsvp
         await _submit_rsvp(
             mock_db, mock_user, "EVT-R-001", True,
             force_refresh=True,
-            resolved_recipient_id="SHOULD-BE-BYPASSED",
+            resolved_recipient_id="CACHED",
         )
 
-    mock_bulk.assert_called_once()
-    mock_resolve.assert_called_once()
+    assert mock_token.call_args.kwargs["force"] is True
+    mock_bulk.assert_not_called()
+    mock_resolve.assert_not_called()
+    assert mock_rsvp.call_args.args[3] == "CACHED"
+

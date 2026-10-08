@@ -163,6 +163,8 @@ At invite_time:
   → status = processed | failed
 ```
 
+Retries: a 401 re-logs in and retries once at once; 5xx/429/timeouts/connection errors follow a ladder (50 ms … 2 s) for up to 20 s; other 4xx get 3 quick retries (covers firing a few ms early). The recipient ID is reused across attempts. `rsvp.sent`/`rsvp.failed` audit details carry `fire_ms`, `prep_ms`, `request_ms`, `response_ms`, `attempts` (ms relative to registration opening).
+
 ## Event Status / Choice Values
 
 | Field | Values |
