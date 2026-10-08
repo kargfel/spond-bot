@@ -77,7 +77,13 @@ The upsert never overwrites an existing `user_choice` — only metadata (heading
 - Discovery finding an updated `invite_time`
 - Application startup (in-memory jobs don't survive restarts)
 
-Both paths converge on `_process_event()`, which handles status transitions, 401 retry, and error recording.
+Both paths converge on `_process_event()`, which handles status transitions, retries and error recording.
+
+**Warmup and prepared connection:** 10 s before the sniper, `run_warmup()` resolves the member ID (cached in `events.resolved_recipient_id`) and then `_open_prepared()` opens the HTTPS connection to Spond and proves the token with `GET /profile` (re-logging in if it was rejected). The result is kept in memory (`_PREPARED`, per event). `run_sniper()` re-reads the event and uses it only if choice and `invite_time` are unchanged, otherwise it closes it and takes the normal path. Any failure to prepare also just means the normal path. Unused connections are closed by `cancel_sniper` and by a 120 s sweep in the executioner.
+
+**Retries (`_submit_with_retries`):** a 401 re-logs in and retries once at once. Transient failures (5xx, 429/408/425, timeouts, connection errors) follow a ladder of 50 ms … 2 s for up to 20 s. Other 4xx get 3 quick retries (covers firing slightly early); a real refusal fails fast. Only the first attempt uses the prepared connection, later ones open fresh sessions; the resolved member ID is reused. Each attempt has a 5 s timeout.
+
+**Timings:** `rsvp.sent` / `rsvp.failed` audit details carry `fire_ms`, `prep_ms`, `request_ms`, `response_ms`, `attempts` and `prepared` (ms relative to registration opening) in addition to `latency_ms`.
 
 ### `app/services/reminders.py` — Registration reminders
 
@@ -277,18 +283,24 @@ The two systems are linked by `frontend_users.linked_user_id → users.id`. An a
 8.    APScheduler fires warmup → run_warmup(event_id)
 9.    GET /sponds/getBulk + GET /groups → resolve recipient_id
 10.   DB: event.resolved_recipient_id = recipient_id (cached)
+    Warmup then opens the HTTPS connection and checks the token (GET /profile);
+    token, member ID and connection are kept in memory (_PREPARED)
 11. At invite_time:
 12.   APScheduler fires sniper → run_sniper(event_id)
-13.   ensure_fresh_token() → decrypt password → POST /auth2/login (if stale)
-14.   If resolved_recipient_id cached: skip getBulk + groups calls
-15.   Else: GET /sponds/getBulk → GET /groups → resolve member ID
+13.   Event re-read; prepared data used only if choice and invite_time still match
+14.   Claim: UPDATE status pending → processing (only one caller wins)
+15.   Prepared: PUT straight on the open connection.
+      Otherwise: ensure_fresh_token() (POST /auth2/login if stale), then the
+      cached member ID, or GET /sponds/getBulk → GET /groups to resolve it
 16.   PUT /sponds/{eventId}/responses/{memberId} {"accepted": true}
 17.   DB: event.status = "processed"
 18.   rsvp_log row written (outcome=success, fired_at, submitted_at)
-19. If 401 at step 16: force token refresh → retry once
-20.   rsvp_log row written (outcome=retry_success or failed)
-21. If still fails: event.status = "failed", error_message recorded
-22.   rsvp_log row written (outcome=failed, error_detail)
+19. If 401 at step 16: force token refresh → retry once, immediately
+20. If 5xx/429/timeout/connection error: retry on the ladder (50 ms … 2 s, up to 20 s);
+    other 4xx: 3 quick retries
+21.   rsvp_log row written (outcome=retry_success or failed, retry_count)
+22. If still fails: event.status = "failed", error_message recorded
+23.   rsvp_log row written (outcome=failed, error_detail)
 ```
 
 On startup, `reschedule_pending_snipers()` in `scheduler.py` re-arms sniper + warmup jobs for all events with `status=pending`, `invite_time > now`, and an active choice — restoring precision scheduling after a restart.
