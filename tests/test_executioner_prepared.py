@@ -132,10 +132,13 @@ async def test_sweep_closes_only_old_prepared_connections():
 
 
 @pytest.mark.asyncio
-async def test_open_prepared_stores_a_checked_connection():
-    ev = MagicMock(id=uuid.uuid4(), user_choice="decline", invite_time=OPEN)
-    with patch.object(executioner.spond_client, "get_profile_id", new_callable=AsyncMock, return_value="P") as prof:
-        await executioner._open_prepared(AsyncMock(), MagicMock(), ev, "tok", "M-1")
+async def test_open_prepared_stores_a_checked_connection(caplog):
+    ev = MagicMock(id=uuid.uuid4(), user_choice="decline", invite_time=OPEN, heading="League match")
+    user = MagicMock(display_name="Mara Lind")
+    with caplog.at_level("INFO", logger=executioner.logger.name), \
+         patch.object(executioner.spond_client, "get_profile_id", new_callable=AsyncMock, return_value="P") as prof:
+        await executioner._open_prepared(AsyncMock(), user, ev, "tok", "M-1")
+    assert "Warmup prepared connection for 'Mara Lind' ('League match', DECLINE)" in caplog.text
     stored = executioner._PREPARED[ev.id]
     assert (stored.token, stored.recipient_id, stored.accepted) == ("tok", "M-1", False)
     prof.assert_awaited_once()
