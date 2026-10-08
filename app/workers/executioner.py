@@ -20,6 +20,7 @@ import logging
 import time
 import uuid as _uuid
 from dataclasses import dataclass
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 
 import aiohttp
@@ -31,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import spond_client
 from app.core.event_bus import bus
 from app.core.spond_client import SpondAPIError, SpondAuthError
-from app.database import AsyncSessionLocal
+from app.database import AsyncSessionLocal, warm_pool
 from app.models.event import (
     CHOICE_ACCEPT,
     CHOICE_DECLINE,
@@ -60,6 +61,12 @@ _REJECTED_RETRIES = 3
 _ATTEMPT_TIMEOUT = aiohttp.ClientTimeout(total=5)
 # A prepared connection older than this was never used (event changed, sniper lost): close it.
 _PREPARED_MAX_AGE_S = 120.0
+# The sniper job starts this long before the opening and then waits for the exact instant on the
+# event loop's clock. Scheduler wake-up and job dispatch jitter (tens of ms) is spent here, not after.
+_SNIPER_HEADSTART_S = 0.25
+# Events a sniper is working on right now. The one-minute executioner leaves them alone, so it
+# neither competes for database connections nor races the sniper for the claim.
+_INFLIGHT: set[_uuid.UUID] = set()
 
 
 @dataclass
@@ -69,6 +76,7 @@ class _Prepared:
 
     http: aiohttp.ClientSession
     token: str
+    spond_event_id: str
     recipient_id: str
     accepted: bool
     invite_time: datetime | None
@@ -79,7 +87,7 @@ class _Prepared:
             await self.http.close()
 
     def matches(self, event: Event) -> bool:
-        """Still what the member wants? The sniper re-checks this against the row it just read."""
+        """Still what the member wants? Checked whenever a decision is (re)scheduled."""
         return (
             self.accepted == (event.user_choice == CHOICE_ACCEPT)
             and event.user_choice in (CHOICE_ACCEPT, CHOICE_DECLINE)
@@ -91,6 +99,15 @@ def _same_instant(a: datetime | None, b: datetime | None) -> bool:
     if a is None or b is None:
         return a is b
     return _aware(a) == _aware(b)
+
+
+@dataclass
+class _PreSend:
+    """An answer the sniper has already sent; the database bookkeeping still has to follow."""
+
+    fired_at: datetime
+    submitted_at: datetime
+    timings: dict
 
 
 _PREPARED: dict[_uuid.UUID, _Prepared] = {}
@@ -204,7 +221,7 @@ async def _submit_with_retries(
     db_event: Event,
     accepted: bool,
     timings: dict,
-    prepared: _Prepared | None = None,
+    force_first: bool = False,
 ) -> datetime:
     """Call _submit_rsvp until it works or the error is final. Fills timings['retries'].
 
@@ -212,17 +229,14 @@ async def _submit_with_retries(
     ladder; the recipient ID resolved by an earlier attempt is reused, never looked up again.
     """
     started = time.monotonic()
-    force_refresh = False
-    auth_refreshed = False
+    force_refresh = auth_refreshed = force_first  # a login the caller already asked for counts as the one retry
     while True:
         try:
-            attempt_prepared, prepared = prepared, None  # only the first attempt rides the prepared connection
             return await _submit_rsvp(
                 db, user, db_event.spond_event_id, accepted,
                 force_refresh=force_refresh,
                 resolved_recipient_id=timings.get("recipient_id") or db_event.resolved_recipient_id,
                 timings=timings,
-                prepared=attempt_prepared,
             )
         except SpondAuthError:
             if auth_refreshed:
@@ -260,7 +274,7 @@ async def run_executioner() -> None:
                 User.is_active == True,  # noqa: E712
             )
         )
-        pending = result.scalars().all()
+        pending = [e for e in result.scalars().all() if e.id not in _INFLIGHT]
 
     if not pending:
         return
@@ -274,17 +288,20 @@ async def run_executioner() -> None:
     )
 
 
-async def _process_event(event: Event, prepared: _Prepared | None = None) -> None:
-    """Handle a single RSVP submission (retrying transient failures), optionally on a prepared connection."""
-    try:
-        await _process_event_inner(event, prepared)
-    finally:
-        if prepared:
-            await prepared.close()
+async def _process_event(
+    event: Event,
+    *,
+    presend: _PreSend | None = None,
+    carry: dict | None = None,
+    force_first: bool = False,
+) -> None:
+    """Record and, unless `presend` says it already went out, send one answer (with retries).
 
-
-async def _process_event_inner(event: Event, prepared: _Prepared | None) -> None:
-    fired_at = datetime.now(timezone.utc)
+    presend      the sniper already sent the PUT: only claim, log and notify
+    carry        timings of an earlier attempt that failed, so the audit entry stays complete
+    force_first  start with a fresh login (the earlier attempt was answered with 401)
+    """
+    fired_at = presend.fired_at if presend else datetime.now(timezone.utc)
     rsvp_log: RsvpLog | None = None
 
     async with AsyncSessionLocal() as db:
@@ -295,6 +312,8 @@ async def _process_event_inner(event: Event, prepared: _Prepared | None) -> None
             .values(status=STATUS_PROCESSING, updated_at=datetime.now(timezone.utc))
         )
         if result.rowcount == 0:
+            if presend:
+                logger.warning("Event %s was already claimed after its answer went out — not recording again.", event.id)
             return  # already claimed or processed by another worker / sniper
 
         db_event = await db.get(Event, event.id)
@@ -326,11 +345,14 @@ async def _process_event_inner(event: Event, prepared: _Prepared | None) -> None
             return
 
         accepted = db_event.user_choice == CHOICE_ACCEPT
-        timings: dict = {"retries": 0}
+        timings: dict = presend.timings if presend else {"retries": 0, **(carry or {})}
         action = "ACCEPT" if accepted else "DECLINE"
 
         try:
-            submitted_at = await _submit_with_retries(db, user, db_event, accepted, timings, prepared)
+            if presend:
+                submitted_at = presend.submitted_at
+            else:
+                submitted_at = await _submit_with_retries(db, user, db_event, accepted, timings, force_first)
             retries = timings["retries"]
             db_event.status = STATUS_PROCESSED
             db_event.error_message = None
@@ -433,17 +455,14 @@ async def _submit_rsvp(
     force_refresh: bool = False,
     resolved_recipient_id: str | None = None,
     timings: dict | None = None,
-    prepared: _Prepared | None = None,
 ) -> datetime:
     """Obtain a fresh token, resolve recipient ID, fire the RSVP. Returns submitted_at.
 
-    With `prepared` (warmup output) the PUT goes straight out on its open connection: no token
-    handling, no lookups, no handshake. Otherwise, if resolved_recipient_id is known (cached by
-    warmup or an earlier attempt) the getBulk and /groups lookups are skipped. force_refresh only
-    forces a re-login; the recipient ID does not depend on the token.
+    If resolved_recipient_id is known (cached by warmup or an earlier attempt) the getBulk and
+    /groups lookups are skipped. force_refresh only forces a re-login; the recipient ID does not
+    depend on the token.
 
-    timings, if given, is filled with: prepared, recipient_id, attempts, first_sent_at,
-    request_ms, done_at.
+    timings, if given, is filled with: recipient_id, attempts, first_sent_at, request_ms, done_at.
     """
     timings = timings if timings is not None else {}
 
@@ -463,10 +482,6 @@ async def _submit_rsvp(
             timings["request_ms"] = round((time.perf_counter() - t0) * 1000)
         timings["done_at"] = datetime.now(timezone.utc)
         return submitted_at
-
-    if prepared is not None and not force_refresh:
-        timings["prepared"] = True
-        return await send(prepared.http, prepared.token, prepared.recipient_id)
 
     token = await ensure_fresh_token(db, user, force=force_refresh)
 
@@ -511,6 +526,13 @@ def schedule_sniper(scheduler: AsyncIOScheduler, event: Event) -> None:
     fire_at = invite - timedelta(milliseconds=settings.rsvp_lead_time_ms)
     if fire_at <= now_cmp:
         fire_at = now  # already past adjusted time — fire immediately
+    run_date = max(fire_at - timedelta(seconds=_SNIPER_HEADSTART_S), now_cmp)
+
+    # A decision that changed since the warmup must not be sent from stale prepared data.
+    stale = _PREPARED.get(event.id)
+    if stale and not stale.matches(event):
+        _PREPARED.pop(event.id, None)
+        asyncio.create_task(stale.close())
 
     job_id = _sniper_job_id(event.id)
     with contextlib.suppress(JobLookupError):
@@ -518,9 +540,9 @@ def schedule_sniper(scheduler: AsyncIOScheduler, event: Event) -> None:
     scheduler.add_job(
         run_sniper,
         trigger="date",
-        run_date=fire_at,
+        run_date=run_date,
         id=job_id,
-        args=[event.id],
+        args=[event.id, fire_at],
         misfire_grace_time=30,
     )
     logger.debug("Sniper scheduled for event %s at %s (lead=%dms)", event.id, fire_at, settings.rsvp_lead_time_ms)
@@ -537,22 +559,69 @@ def cancel_sniper(scheduler: AsyncIOScheduler, event_id: _uuid.UUID) -> None:
     asyncio.create_task(bus.publish_admin("scheduler_changed", {"action": "cancelled", "event_id": str(event_id)}))
 
 
-async def run_sniper(event_id: _uuid.UUID) -> None:
-    """One-shot job called by APScheduler at invite_time."""
-    prepared = _PREPARED.pop(event_id, None)
+async def _sleep_until(when: datetime) -> None:
+    remaining = (_aware(when) - datetime.now(timezone.utc)).total_seconds()
+    if remaining > 0:
+        await asyncio.sleep(remaining)
+
+
+async def run_sniper(event_id: _uuid.UUID, fire_at: datetime | None = None) -> None:
+    """One-shot job: wait for the exact instant (if `fire_at` is given), then send.
+
+    With a prepared connection the PUT leaves without any database access; claim, log and
+    notifications follow. Without one the normal path runs (read, claim, send with retries).
+    """
+    if event_id in _INFLIGHT:
+        return  # a rescheduled duplicate (e.g. discovery during the head start): the first one answers
+    _INFLIGHT.add(event_id)
+    prepared: _Prepared | None = None
     try:
+        if fire_at is not None:
+            await _sleep_until(fire_at)
+        prepared = _PREPARED.pop(event_id, None)
+        if prepared is not None:
+            await _fire_prepared(event_id, prepared)
+            return
         async with AsyncSessionLocal() as db:
             event = await db.get(Event, event_id)
-        if prepared and not (event and prepared.matches(event)):
-            # Decision or opening time changed since the warmup: don't send stale data.
-            await prepared.close()
-            prepared = None
-        if event:
-            await _process_event(event, prepared)
-            prepared = None  # _process_event closed it
+        # A job that is already running cannot be cancelled, so a change of mind during the head start is checked here.
+        if event and event.status == STATUS_PENDING and event.user_choice in (CHOICE_ACCEPT, CHOICE_DECLINE):
+            await _process_event(event)
     finally:
-        if prepared:
+        _INFLIGHT.discard(event_id)
+        if prepared is not None:
             await prepared.close()
+
+
+async def _fire_prepared(event_id: _uuid.UUID, prepared: _Prepared) -> None:
+    fired_at = datetime.now(timezone.utc)
+    stub = SimpleNamespace(id=event_id)
+    timings: dict = {
+        "retries": 0, "attempts": 1, "prepared": True,
+        "recipient_id": prepared.recipient_id, "first_sent_at": datetime.now(timezone.utc),
+    }
+    t0 = time.perf_counter()
+    try:
+        await spond_client.rsvp(
+            prepared.http, prepared.token, prepared.spond_event_id, prepared.recipient_id, prepared.accepted
+        )
+    except Exception as exc:
+        timings["request_ms"] = round((time.perf_counter() - t0) * 1000)
+        logger.warning("Prepared send for event %s failed (%s) — continuing on the normal path.", event_id, exc or type(exc).__name__)
+        await prepared.close()
+        await _process_event(
+            stub, carry={**timings, "retries": 1}, force_first=isinstance(exc, SpondAuthError)  # type: ignore[arg-type]
+        )
+        return
+    timings["request_ms"] = round((time.perf_counter() - t0) * 1000)
+    timings["done_at"] = datetime.now(timezone.utc)
+    try:
+        await _process_event(
+            stub,  # type: ignore[arg-type]
+            presend=_PreSend(fired_at, timings["first_sent_at"], timings),
+        )
+    finally:
+        await prepared.close()
 
 
 # ---------------------------------------------------------------------------
@@ -608,6 +677,7 @@ async def run_warmup(event_id: _uuid.UUID) -> None:
     Runs ~10 s before invite_time. Failures are logged as warnings; the sniper
     will fall back to full resolution if this field is still None at fire time.
     """
+    await warm_pool(min_interval_s=30)  # a no-op for all but the first warmup of a batch
     async with AsyncSessionLocal() as db:
         event = await db.get(Event, event_id)
         if not event or event.status != STATUS_PENDING:
@@ -669,6 +739,7 @@ async def _open_prepared(db: AsyncSession, user: User, event: Event, token: str,
         _PREPARED[event.id] = _Prepared(
             http=http,
             token=token,
+            spond_event_id=event.spond_event_id,
             recipient_id=recipient_id,
             accepted=event.user_choice == CHOICE_ACCEPT,
             invite_time=event.invite_time,

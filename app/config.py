@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     executioner_interval_seconds: int = 60
     rsvp_lead_time_ms: int = 0
 
+    # Database connection pool. Answers for one opening are written at the same moment, so the pool
+    # must hold enough warm connections for all members at once (see database.warm_pool).
+    db_pool_size: int = 30
+    db_max_overflow: int = 20
+
     # Timezone (used by APScheduler)
     tz: str = "Europe/Berlin"
 
