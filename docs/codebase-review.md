@@ -37,6 +37,8 @@
 - **2026-05-21**: Timing precision metrics added (p50/p95 in admin stats)
 - **2026-05-21**: Sniper race condition fixed (atomic claim via `UPDATE ... WHERE status=pending`)
 - **2026-05-21**: Warmup pre-fetch added (fires 10s before sniper, caches `resolved_recipient_id`)
+- **2026-10-08**: Retry ladder for transient RSVP failures, per-phase timings in the audit details (`fire_ms`, `prep_ms`, `request_ms`, `response_ms`, `attempts`)
+- **2026-10-08**: Warmup prepares token, member ID and an open HTTPS connection; the sniper sends on it when the decision is unchanged
 - **2026-09-24**: API routes renamed (`/auth/users` → `/accounts`, `/users` → `/spond-accounts`, `PATCH /events/{id}/decision` → `PATCH /events/{id}`, `POST /sync` → `POST /admin/sync`)
 - **2026-09-24**: Swagger UI protected behind admin session auth
 - **2026-09-24**: SSE streams added (`/admin/stream`, `/user/stream`)
@@ -93,7 +95,7 @@ Body: {"accepted": true}   (or false for decline)
 Expected: 200 or 204
 ```
 
-`recipientId` is the per-group member ID, **not** the global profile ID (see *Member ID vs Profile ID* above). On 401, the executioner forces a token refresh and retries once.
+`recipientId` is the per-group member ID, **not** the global profile ID (see *Member ID vs Profile ID* above). On 401, the executioner forces a token refresh and retries once; transient errors (5xx, 429, timeouts, connection errors) are retried on a short ladder, see `docs/architecture.md`.
 
 ### getBulk chunking
 
