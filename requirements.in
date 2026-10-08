@@ -4,11 +4,11 @@
 # Docker and CI install the pinned requirements.txt, never this file.
 
 # Web framework
-fastapi>=0.115.0
+fastapi>=0.142.2
 uvicorn[standard]>=0.30.0
 
 # Database
-sqlalchemy[asyncio]>=2.0.0
+sqlalchemy[asyncio]>=2.1.3
 asyncpg>=0.29.0
 alembic>=1.14.0
 
@@ -16,7 +16,7 @@ alembic>=1.14.0
 apscheduler>=3.10.0
 
 # Security
-cryptography>=42.0.0
+cryptography>=50.0.2
 joserfc>=0.12.0
 bcrypt>=4.0.0
 python-multipart>=0.0.9
@@ -32,7 +32,7 @@ aiohttp>=3.13.4
 pywebpush>=2.0.0
 
 # Utilities
-python-dotenv>=1.2.2
+python-dotenv>=1.2.4
 
 # Testing
 pytest>=8.0.0
