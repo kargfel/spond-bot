@@ -98,10 +98,102 @@ test.describe("admin panel", () => {
     await expect(page.getByTestId("queue-row")).toHaveCount(1);
   });
 
-  test("past events can be included", async ({ page }) => {
+  /** Old, never answered events, one per week. */
+  const history = (api, count, owner = "u1") => {
+    for (let i = 1; i <= count; i++) {
+      const start = Date.parse("2026-09-20T18:00:00Z") - i * 7 * 864e5;
+      api.state.events.push({
+        id: `h${i}`, spond_event_id: `sp-h${i}`, user_id: owner, heading: `History ${i}`, start_timestamp: new Date(start).toISOString(),
+        invite_time: new Date(start - 7 * 864e5).toISOString(), rsvp_date: null, user_choice: "manual", status: "pending",
+        error_message: null, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+      });
+    }
+  };
+
+  test("the queue asks for a window, not for every event ever stored", async ({ page, api }) => {
+    history(api, 300);
     await page.goto("/admin");
-    await page.getByLabel("Include past events").check();
-    await expect(qrow(page, "Old friendly match")).toBeVisible();
+    await expect(page.getByTestId("queue-row").first()).toBeVisible();
+    const calls = api.callsTo("GET", "/events");
+    expect(calls.length).toBe(2);                                    // the window, and older failures
+    const win = calls.find((c) => c.query.status === undefined);
+    expect(Date.parse(win.query.start_from)).toBeGreaterThan(Date.parse("2026-09-23T00:00:00Z"));
+    expect(Date.parse(win.query.start_to) - Date.parse("2026-09-26T19:00:00Z")).toBe(60 * 864e5);
+    expect(await page.getByTestId("queue-row").count()).toBeLessThan(15);   // 300 old events are not even in the page
+    await expect(page.getByTestId("queue-note")).toContainText("last 2 days and the next 60 days");
+  });
+
+  test("the queue is grouped: what needs attention, what was just answered, what is coming, the rest", async ({ page }) => {
+    await page.goto("/admin");
+    const heads = page.getByTestId("queue-group");
+    await expect(heads).toHaveText([/Needs attention\s*1/, /Answered in the last 48 hours\s*1/, /Coming up\s*6/]);   // nothing earlier in the window
+    const order = await page.getByTestId("queue-row").evaluateAll((rows) => rows.map((r) => r.querySelector(".c-ev .t-strong").textContent));
+    expect(order.slice(0, 2)).toEqual(["Autumn tournament", "Training, Hall B"]);   // failed, then answered two days ago
+    expect(order.indexOf("Sunday league")).toBeGreaterThan(1);                      // armed / coming up
+  });
+
+  test("an answer from an hour ago sits right under the failures, not at the bottom", async ({ page, api }) => {
+    for (let i = 0; i < 40; i++) {            // a long list of upcoming events
+      api.state.events.push({ id: `up${i}`, spond_event_id: `sp-up${i}`, user_id: "u2", heading: `Upcoming ${i}`,
+        start_timestamp: new Date(Date.parse("2026-10-01T18:00:00Z") + i * 864e5).toISOString(),
+        invite_time: new Date(Date.parse("2026-09-28T18:00:00Z") + i * 864e5).toISOString(), rsvp_date: null,
+        user_choice: "accept", status: "pending", error_message: null, created_at: "2026-09-01T00:00:00Z", updated_at: "2026-09-01T00:00:00Z" });
+    }
+    api.state.events.push({ id: "fresh", spond_event_id: "sp-fresh", user_id: "u2", heading: "Answered an hour ago",
+      start_timestamp: "2026-10-03T18:00:00Z", invite_time: "2026-09-26T18:00:00Z", rsvp_date: null, user_choice: "accept",
+      status: "processed", error_message: null, created_at: "2026-09-01T00:00:00Z", updated_at: "2026-09-26T18:00:01Z" });
+    await page.goto("/admin");
+    await expect(qrow(page, "Answered an hour ago")).toBeVisible();
+    const order = await page.getByTestId("queue-row").evaluateAll((rows) => rows.map((r) => r.querySelector(".c-ev .t-strong").textContent));
+    expect(order.indexOf("Answered an hour ago")).toBeLessThan(3);
+    expect(order.length).toBeGreaterThan(40);
+  });
+
+  test("older failures stay visible without widening the range", async ({ page, api }) => {
+    api.state.events.push({ id: "oldfail", spond_event_id: "sp-oldfail", user_id: "u1", heading: "Failed last week", start_timestamp: "2026-09-20T18:00:00Z",
+      invite_time: "2026-09-13T18:00:00Z", rsvp_date: null, user_choice: "accept", status: "failed", error_message: "403 member not found",
+      created_at: "2026-09-01T00:00:00Z", updated_at: "2026-09-13T18:00:01Z" });
+    history(api, 3);                                                 // quiet history stays out
+    await page.goto("/admin");
+    await expect(qrow(page, "Failed last week")).toBeVisible();
+    await expect(qrow(page, "Failed last week")).toContainText("403 member not found");
+    await expect(qrow(page, "History 1")).toHaveCount(0);
+  });
+
+  test("a longer range loads earlier events newest first, in pages", async ({ page, api }) => {
+    history(api, 130);
+    await page.goto("/admin");
+    await expect(qrow(page, "Old friendly match")).toHaveCount(0);   // started Sep 20: before the window
+    await page.getByLabel("Show").selectOption("30d");
+    await expect(qrow(page, "Old friendly match")).toBeVisible();    // within the last 30 days
+    await expect(qrow(page, "History 1")).toBeVisible();             // Sep 13
+    await expect(qrow(page, "History 5")).toHaveCount(0);            // Aug 16: older than 30 days
+    await expect(page.getByTestId("queue-more")).toBeHidden();       // everything in range fit one page
+
+    await page.getByLabel("Show").selectOption("all");
+    await expect(page.getByTestId("queue-note")).toContainText("100 earlier events loaded");
+    await expect(page.getByTestId("queue-more")).toBeVisible();
+    await expect(qrow(page, "History 130")).toHaveCount(0);
+    const rowsBefore = await page.getByTestId("queue-row").count();
+    await page.getByTestId("queue-more").click();
+    await expect(qrow(page, "History 130")).toBeVisible();           // second page
+    await expect(page.getByTestId("queue-more")).toBeHidden();
+    await expect(page.getByTestId("queue-note")).toContainText("that is all of them");
+    expect(await page.getByTestId("queue-row").count()).toBeGreaterThan(rowsBefore);
+
+    const older = api.callsTo("GET", "/events").filter((c) => c.query.order === "-start" && c.query.limit === "100");
+    expect(older.map((c) => c.query.offset)).toEqual(["0", "0", "100"]);   // 30d, all, then "show more"
+    await page.getByLabel("Show").selectOption("2d");                      // back to the window: earlier rows disappear
+    await expect(qrow(page, "History 1")).toHaveCount(0);
+  });
+
+  test("the account filter is applied to earlier events on the server too", async ({ page, api }) => {
+    history(api, 5, "u1");
+    history(api, 5, "u2");
+    await page.goto("/admin");
+    await page.getByLabel("Show").selectOption("all");
+    await page.getByRole("combobox", { name: "Account" }).selectOption({ label: "Mara Lind" });
+    await expect.poll(() => api.callsTo("GET", "/events").some((c) => c.query.user_id === "u2" && c.query.order === "-start")).toBe(true);
   });
 
   test("sync asks the discovery worker to run", async ({ page, api }) => {
@@ -152,7 +244,7 @@ test.describe("admin panel", () => {
 
   test("timeline: an event whose start is beyond the window shows its registration and no start block", async ({ page, api }) => {
     api.state.events.push({
-      id: "x2", spond_event_id: "sp-x2", user_id: "u2", heading: "Winter camp", start_timestamp: "2026-12-12T09:00:00Z",
+      id: "x2", spond_event_id: "sp-x2", user_id: "u2", heading: "Winter camp", start_timestamp: "2026-10-20T09:00:00Z",
       invite_time: "2026-09-30T09:00:00Z", rsvp_date: null, user_choice: "manual", status: "pending", error_message: null,
       created_at: "2026-09-19T00:00:00Z", updated_at: "2026-09-19T16:00:01Z",
     });

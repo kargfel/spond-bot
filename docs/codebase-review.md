@@ -40,6 +40,7 @@
 - **2026-10-08**: Retry ladder for transient RSVP failures, per-phase timings in the audit details (`fire_ms`, `prep_ms`, `request_ms`, `response_ms`, `attempts`)
 - **2026-10-08**: Warmup prepares token, member ID and an open HTTPS connection; the sniper sends on it when the decision is unchanged
 - **2026-10-08**: Sniper sends from prepared data without touching the database; head start + exact wait; executioner skips in-flight events (first measured run showed 5 of 9 answers delayed ~400 ms by a database connection burst); DB pool 30 + 20, warmed before openings
+- **2026-10-08**: Event lists are windowed: `GET /events` slices (`start_from`/`start_to`/`order`/`limit`/`offset`); admin queue loads a window (2 d back, 60 d ahead, recent failures) and groups rows (attention / answered in 48 h / coming up / earlier); member Past tab loads on demand, 30 per page. Before, "Include past" downloaded and rendered every event ever stored and sorted answered events below all others
 - **2026-10-08**: Admin timeline no longer draws a registration that opened before the visible window as a marker on the left edge
 - **2026-09-24**: API routes renamed (`/auth/users` → `/accounts`, `/users` → `/spond-accounts`, `PATCH /events/{id}/decision` → `PATCH /events/{id}`, `POST /sync` → `POST /admin/sync`)
 - **2026-09-24**: Swagger UI protected behind admin session auth

@@ -15,7 +15,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="admin.css?v=4" />
+    <link rel="stylesheet" href="admin.css?v=5" />
     <script
       src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
       integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g"
@@ -85,7 +85,15 @@
             </select>
           </div>
           <div class="field grow"><label for="q-search">Search</label><input class="input" id="q-search" type="search" placeholder="Event or account" /></div>
-          <label class="check"><input type="checkbox" id="q-past" /> Include past events</label>
+          <div class="field">
+            <label for="q-range">Show</label>
+            <select class="input" id="q-range">
+              <option value="2d">Recent and upcoming</option>
+              <option value="7d">Plus the last 7 days</option>
+              <option value="30d">Plus the last 30 days</option>
+              <option value="all">Plus everything earlier</option>
+            </select>
+          </div>
         </div>
 
         <div class="table-wrap">
@@ -95,6 +103,10 @@
             </thead>
             <tbody id="queue-body"></tbody>
           </table>
+        </div>
+        <div class="queue-foot">
+          <span class="t-dim" id="queue-note" data-testid="queue-note" role="status"></span>
+          <button type="button" class="btn btn-small" id="queue-more" data-testid="queue-more" hidden>Show more</button>
         </div>
       </section>
 
@@ -332,6 +344,6 @@
 
     <script src="core.js?v=5"></script>
     <script src="app.js?v=9"></script>
-    <script src="admin.js?v=6"></script>
+    <script src="admin.js?v=7"></script>
   </body>
 </html>

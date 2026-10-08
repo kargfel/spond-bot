@@ -175,24 +175,63 @@
     return (id) => byId.get(id) || String(id || "").slice(0, 8);
   }
 
-  /** Queue rows for the admin console: failed first, then by invite time, sent last. */
+  /* Admin queue: what the page loads and how it is grouped. */
+  const RECENT_MS = 2 * DAY;      // "answered recently" = registration opened within this long
+  const QUEUE_PAST_MS = 2 * DAY;  // how far back the queue loads by default
+  const QUEUE_AHEAD_MS = 60 * DAY; // how far ahead the admin queue looks
+  const QUEUE_FAILED_MS = 30 * DAY; // failures stay on the radar this long
+
+  const QUEUE_GROUPS = [
+    { key: "attention", label: "Needs attention" },
+    { key: "recent", label: "Answered in the last 48 hours" },
+    { key: "upcoming", label: "Coming up" },
+    { key: "earlier", label: "Earlier" },
+  ];
+
+  /** Which block of the admin queue an event belongs to. */
+  function queueGroup(ev, state, now = Date.now()) {
+    if (state === "failed" || state === "sending") return "attention";
+    const invite = ms(ev.invite_time);
+    const start = ms(ev.start_timestamp);
+    if (state === "sent") return invite != null && invite >= now - RECENT_MS ? "recent" : "earlier";
+    return start != null && start < now ? "earlier" : "upcoming";
+  }
+
+  /**
+   * Queue rows for the admin console, in four blocks:
+   *   attention  failed (newest first), then sending
+   *   recent     answered in the last 48 h, newest first: the check "did last night's run work?"
+   *   upcoming   armed / open / left to the member, next to fire first
+   *   earlier    everything older, most recent event first
+   * An answered event used to sink below every other row, however new it was.
+   */
   function buildQueue(events, jobs, users, now = Date.now()) {
     const jobsByEvent = new Map(jobs.map((j) => [String(j.event_id), j]));
     const nameOf = userNameLookup(users);
-    const rank = { failed: 0, sent: 2 };
-    return events
-      .map((event) => ({
+    const order = QUEUE_GROUPS.map((g) => g.key);
+    const fireAt = (r) => ms(r.job?.fire_at) ?? ms(r.event.invite_time) ?? Infinity;
+    const newest = (a, b) => (ms(b.invite_time) ?? -Infinity) - (ms(a.invite_time) ?? -Infinity);
+    const rows = events.map((event) => {
+      const state = eventState(event, now);
+      return {
         event,
-        state: eventState(event, now),
+        state,
+        group: queueGroup(event, state, now),
         job: jobsByEvent.get(String(event.id)) || null,
         userName: nameOf(event.user_id),
-      }))
-      .sort((a, b) => {
-        const ra = rank[a.state] ?? 1;
-        const rb = rank[b.state] ?? 1;
-        if (ra !== rb) return ra - rb;
-        return ra === 2 ? byInvite(b.event, a.event) : byInvite(a.event, b.event);
-      });
+      };
+    });
+    return rows.sort((a, b) => {
+      if (a.group !== b.group) return order.indexOf(a.group) - order.indexOf(b.group);
+      switch (a.group) {
+        case "attention":
+          if (a.state !== b.state) return a.state === "failed" ? -1 : 1;
+          return newest(a.event, b.event);
+        case "recent": return newest(a.event, b.event);
+        case "upcoming": return fireAt(a) - fireAt(b);
+        default: return (ms(b.event.start_timestamp) ?? -Infinity) - (ms(a.event.start_timestamp) ?? -Infinity) || newest(a.event, b.event);
+      }
+    });
   }
 
   /** Timeline lanes for the admin: one per Spond account, sorted by name. */
@@ -414,6 +453,12 @@
     escapeHtml,
     timelineScale,
     buildQueue,
+    queueGroup,
+    QUEUE_GROUPS,
+    QUEUE_PAST_MS,
+    QUEUE_AHEAD_MS,
+    QUEUE_FAILED_MS,
+    RECENT_MS,
     groupByUser,
     auditLabel,
     auditWho,

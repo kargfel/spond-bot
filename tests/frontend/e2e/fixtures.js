@@ -322,6 +322,17 @@ class MockApi {
       }
       if (q.get("status")) list = list.filter((e) => e.status === q.get("status"));
       if (q.get("choice")) list = list.filter((e) => e.user_choice === q.get("choice"));
+      // Slices, like app/api/events.py: start_from / start_to / order / limit / offset
+      const startOf = (e) => (e.start_timestamp ? Date.parse(e.start_timestamp) : null);
+      if (q.get("start_from")) {
+        const from = Date.parse(q.get("start_from"));
+        list = list.filter((e) => (startOf(e) == null ? !q.get("start_to") : startOf(e) >= from));
+      }
+      if (q.get("start_to")) list = list.filter((e) => startOf(e) != null && startOf(e) < Date.parse(q.get("start_to")));
+      const order = q.get("order") || "invite";
+      const key = order === "invite" ? (e) => Date.parse(e.invite_time) : startOf;
+      list = [...list].sort((a, b) => (order === "-start" ? -1 : 1) * ((key(a) ?? Infinity) - (key(b) ?? Infinity)));
+      if (q.get("limit")) list = list.slice(Number(q.get("offset") || 0), Number(q.get("offset") || 0) + Number(q.get("limit")));
       return json(200, list);
     }
     if ((hit = m(/^\/events\/([^/]+)$/))) {

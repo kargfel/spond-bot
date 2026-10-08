@@ -152,6 +152,10 @@ td.num, th.num { text-align: right; }
 .t-dim { color: var(--dim); }
 .t-err { color: var(--bad); font-family: var(--mono); font-size: 12px; margin-top: 3px; }
 .nowrap { white-space: nowrap; }
+.group-row th { text-align: left; font-weight: 500; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--dim); padding: 14px 12px 6px; border-bottom: 1px solid var(--line); background: transparent; }
+.group-row .count { margin-left: 6px; color: var(--tx); font-family: var(--mono); }
+.queue-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 4px; font-size: 13px; }
 .row-past td { color: var(--dim); }
 .row-past .t-strong { color: var(--dim); }
 .actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
@@ -185,6 +189,8 @@ td.num, th.num { text-align: right; }
     padding: 12px; border-top: 1px solid var(--line);
   }
   .queue-table tbody tr:first-child { border-top: 0; }
+  .queue-table tr.group-row { display: block; padding: 0; border-top: 0; }
+  .queue-table .group-row th { display: block; padding: 16px 12px 6px; }
   .queue-table td { display: block; padding: 0; border: 0; }
   .queue-table .c-ev { grid-area: ev; }
   .queue-table .c-st { grid-area: st; text-align: right; }

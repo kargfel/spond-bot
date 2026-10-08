@@ -217,7 +217,7 @@ describe("buildQueue (admin)", () => {
     { id: "u2", display_name: "Mara" },
   ];
 
-  test("joins users and scheduler jobs, failed first, sent last", () => {
+  test("joins users and scheduler jobs; failed first, then what was just answered, then what is coming", () => {
     const events = [
       ev({ id: "sent", status: "processed", invite_time: iso(NOW - D) }),
       ev({ id: "late", user_id: "u2", invite_time: iso(NOW + 2 * D) }),
@@ -226,11 +226,60 @@ describe("buildQueue (admin)", () => {
     ];
     const jobs = [{ job_id: "sniper_soon", event_id: "soon", fire_at: iso(NOW + H), countdown_s: 3600 }];
     const rows = Core.buildQueue(events, jobs, users, NOW);
-    assert.deepEqual(rows.map((r) => r.event.id), ["bad", "soon", "late", "sent"]);
-    assert.equal(rows[1].job.job_id, "sniper_soon");
-    assert.equal(rows[2].job, null);
-    assert.equal(rows[2].userName, "Mara");
+    assert.deepEqual(rows.map((r) => r.event.id), ["bad", "sent", "soon", "late"]);
+    assert.deepEqual(rows.map((r) => r.group), ["attention", "recent", "upcoming", "upcoming"]);
+    assert.equal(rows[2].job.job_id, "sniper_soon");
+    assert.equal(rows[3].job, null);
+    assert.equal(rows[3].userName, "Mara");
     assert.equal(rows[0].state, "failed");
+  });
+
+  test("an event answered an hour ago is not buried below old rows (the real-world complaint)", () => {
+    const events = [];
+    for (let w = 1; w <= 18; w++) for (let k = 0; k < 9; k++) {
+      events.push(ev({ id: `old-${w}-${k}`, user_choice: "manual", invite_time: iso(NOW - (w * 7 + 7) * D), start_timestamp: iso(NOW - w * 7 * D) }));
+    }
+    events.push(ev({ id: "answered", status: "processed", user_choice: "accept", invite_time: iso(NOW - H), start_timestamp: iso(NOW + 7 * D) }));
+    events.push(ev({ id: "armed", invite_time: iso(NOW + 6 * D), start_timestamp: iso(NOW + 13 * D) }));
+    const rows = Core.buildQueue(events, [], users, NOW);
+    assert.equal(rows.length, 164);
+    assert.deepEqual(rows.slice(0, 2).map((r) => r.event.id), ["answered", "armed"]);
+    assert.equal(rows[0].group, "recent");
+    assert.ok(rows.slice(2).every((r) => r.group === "earlier"));
+  });
+
+  test("blocks: failed before sending, recent newest first, upcoming by fire time, earlier by event start", () => {
+    const rows = Core.buildQueue([
+      ev({ id: "old-a", status: "processed", invite_time: iso(NOW - 10 * D), start_timestamp: iso(NOW - 3 * D) }),
+      ev({ id: "old-b", status: "processed", invite_time: iso(NOW - 20 * D), start_timestamp: iso(NOW - 12 * D) }),
+      ev({ id: "unanswered-past", user_choice: "manual", invite_time: iso(NOW - 9 * D), start_timestamp: iso(NOW - D) }),
+      ev({ id: "r1", status: "processed", invite_time: iso(NOW - 3 * H) }),
+      ev({ id: "r2", status: "processed", invite_time: iso(NOW - 30 * H) }),
+      ev({ id: "u-late", invite_time: iso(NOW + 5 * D), start_timestamp: iso(NOW + 9 * D) }),
+      ev({ id: "u-job", invite_time: iso(NOW + 5 * D), start_timestamp: iso(NOW + 9 * D) }),
+      ev({ id: "u-open", user_choice: "manual", invite_time: iso(NOW + D), start_timestamp: iso(NOW + 8 * D) }),
+      ev({ id: "sending", status: "processing", invite_time: iso(NOW - 1000) }),
+      ev({ id: "f-old", status: "failed", invite_time: iso(NOW - 8 * D) }),
+      ev({ id: "f-new", status: "failed", invite_time: iso(NOW - H) }),
+    ], [{ job_id: "j", event_id: "u-job", fire_at: iso(NOW + 2 * D) }], users, NOW);
+    assert.deepEqual(rows.map((r) => r.event.id),
+      ["f-new", "f-old", "sending", "r1", "r2", "u-open", "u-job", "u-late", "unanswered-past", "old-a", "old-b"]);
+  });
+
+  test("answered just over 48 hours ago counts as earlier", () => {
+    const rows = Core.buildQueue([
+      ev({ id: "edge-in", status: "processed", invite_time: iso(NOW - Core.RECENT_MS + 1000) }),
+      ev({ id: "edge-out", status: "processed", invite_time: iso(NOW - Core.RECENT_MS - 1000) }),
+    ], [], users, NOW);
+    assert.deepEqual(rows.map((r) => r.group), ["recent", "earlier"]);
+  });
+
+  test("events without times do not break the order", () => {
+    const rows = Core.buildQueue([
+      ev({ id: "none", invite_time: null, start_timestamp: null }),
+      ev({ id: "dated", invite_time: iso(NOW + D) }),
+    ], [], users, NOW);
+    assert.deepEqual(rows.map((r) => r.event.id), ["dated", "none"]);
   });
 
   test("falls back to a short id for unknown users", () => {

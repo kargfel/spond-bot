@@ -146,7 +146,7 @@ All routes are prefixed with `/api/v1/`.
 | `POST` | `/push/subscribe` | user | Register this browser (`PushSubscription.toJSON()`); only known push services are accepted |
 | `POST` | `/push/unsubscribe` | user | Forget this browser (own devices only) |
 | `POST` | `/push/test` | user | Send a test notification to your own devices (rate-limited) |
-| `GET` | `/events` | user | List events for current user (`all=true` for admins) |
+| `GET` | `/events` | user | List events for current user (`all=true` for admins). Slices: `start_from`, `start_to`, `order` (`invite`/`start`/`-start`), `limit` (≤ 1000), `offset`; without them everything is returned |
 | `GET` | `/events/{id}` | user | Get one event |
 | `PATCH` | `/events/{id}` | user | Set RSVP decision (arms/disarms sniper) |
 | `GET` | `/health` | — | 200 when database and scheduler are OK, 503 otherwise |
