@@ -127,6 +127,42 @@ test.describe("admin panel", () => {
     await expect(detail.getByRole("button", { name: "Going", exact: true })).toHaveAttribute("aria-pressed", "true");
   });
 
+  test("timeline: a registration that opened before the window leaves no marker on the edge", async ({ page, api }) => {
+    // Opened 7 days before the visible window, the event itself is inside it (like a real club event
+    // whose registration opens a week ahead). Its marker used to be clamped onto the left border.
+    api.state.events.push({
+      id: "x1", spond_event_id: "sp-x1", user_id: "u1", heading: "Late registration", start_timestamp: "2026-10-03T20:15:00Z",
+      invite_time: "2026-09-19T16:00:00Z", rsvp_date: null, user_choice: "accept", status: "processed", error_message: null,
+      created_at: "2026-09-19T00:00:00Z", updated_at: "2026-09-19T16:00:01Z",
+    });
+    await page.goto("/admin#timeline");
+    await page.reload();
+    const lane = page.getByTestId("lane").nth(0);
+    await expect(lane).toContainText("Felix Karg");
+    await expect(lane.getByRole("button", { name: /Late registration/ })).toHaveCount(0);   // no phantom marker
+    await expect(lane.locator('.tl-event[title^="Late registration"]')).toHaveCount(1);          // the event start is drawn
+    const links = lane.locator(".tl-link");
+    const clipped = await links.evaluateAll((els) => els.filter((e) => e.style.left === "0%").length);
+    expect(clipped).toBe(1);                                                                // dotted link runs in from the edge
+
+    // Every other marker is still where its own time says, and events outside the window stay out.
+    await expect(lane.getByRole("button", { name: /League match/ })).toHaveCount(1);
+    await expect(lane.getByRole("button", { name: /Old friendly/ })).toHaveCount(0);
+  });
+
+  test("timeline: an event whose start is beyond the window shows its registration and no start block", async ({ page, api }) => {
+    api.state.events.push({
+      id: "x2", spond_event_id: "sp-x2", user_id: "u2", heading: "Winter camp", start_timestamp: "2026-12-12T09:00:00Z",
+      invite_time: "2026-09-30T09:00:00Z", rsvp_date: null, user_choice: "manual", status: "pending", error_message: null,
+      created_at: "2026-09-19T00:00:00Z", updated_at: "2026-09-19T16:00:01Z",
+    });
+    await page.goto("/admin#timeline");
+    await page.reload();
+    const lane = page.getByTestId("lane").nth(1);
+    await expect(lane.getByRole("button", { name: /Winter camp/ })).toHaveCount(1);
+    await expect(lane.locator('.tl-event[title^="Winter camp"]')).toHaveCount(0);
+  });
+
   test("users: lists logins and Spond accounts and creates a login", async ({ page, api }) => {
     await page.goto("/admin#users");
     const logins = page.getByRole("table", { name: "Dashboard logins" });
