@@ -29,7 +29,11 @@ class SpondAuthError(Exception):
 
 
 class SpondAPIError(Exception):
-    """Raised for non-auth API failures (4xx/5xx other than 401)."""
+    """Raised for non-auth API failures (4xx/5xx other than 401). `status` is the HTTP code, if any."""
+
+    def __init__(self, message: str = "", status: int | None = None):
+        super().__init__(message)
+        self.status = status
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +120,7 @@ async def get_profile_id(session: aiohttp.ClientSession, token: str) -> str:
             raise SpondAuthError("Token rejected when fetching profile.")
         if not r.ok:
             text = await r.text()
-            raise SpondAPIError(f"Profile fetch failed [{r.status}]: {text}")
+            raise SpondAPIError(f"Profile fetch failed [{r.status}]: {text}", r.status)
         data = await r.json()
 
     profile_id = data.get("id")
@@ -224,7 +228,7 @@ async def get_upcoming_events(
             raise SpondAuthError("Token rejected on upcoming-events fetch.")
         if not r.ok:
             text = await r.text()
-            raise SpondAPIError(f"Upcoming events failed [{r.status}]: {text}")
+            raise SpondAPIError(f"Upcoming events failed [{r.status}]: {text}", r.status)
         return await r.json()
 
 
@@ -250,7 +254,7 @@ async def get_bulk_events(
             raise SpondAuthError("Token rejected on getBulk fetch.")
         if not r.ok:
             text = await r.text()
-            raise SpondAPIError(f"getBulk failed [{r.status}]: {text}")
+            raise SpondAPIError(f"getBulk failed [{r.status}]: {text}", r.status)
         return await r.json()
 
 
@@ -281,7 +285,7 @@ async def rsvp(
             )
         if r.status not in (200, 204):
             text = await r.text()
-            raise SpondAPIError(f"RSVP failed [{r.status}]: {text}")
+            raise SpondAPIError(f"RSVP failed [{r.status}]: {text}", r.status)
 
 
 def parse_event_timestamps(raw: dict) -> dict:
