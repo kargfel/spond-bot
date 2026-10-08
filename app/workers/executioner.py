@@ -674,6 +674,10 @@ async def _open_prepared(db: AsyncSession, user: User, event: Event, token: str,
             invite_time=event.invite_time,
             created=time.monotonic(),
         )
+        logger.info(
+            "Warmup prepared connection for %r (%r, %s)",
+            user.display_name, event.heading, "ACCEPT" if event.user_choice == CHOICE_ACCEPT else "DECLINE",
+        )
     except Exception as exc:
         await http.close()
         logger.warning("Warmup could not pre-connect for event %s: %s — sniper will connect itself", event.id, exc)
