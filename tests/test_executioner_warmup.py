@@ -34,7 +34,8 @@ async def test_run_warmup_caches_recipient_id():
          patch("app.workers.executioner.spond_client.get_bulk_events",
                new_callable=AsyncMock, return_value=[{"id": "EVT-WARM-001"}]), \
          patch("app.workers.executioner.spond_client.resolve_recipient_id",
-               new_callable=AsyncMock, return_value="RECIP789"):
+               new_callable=AsyncMock, return_value="RECIP789"), \
+         patch("app.workers.executioner._open_prepared", new_callable=AsyncMock):
         from app.workers.executioner import run_warmup
         await run_warmup(event_id)
 

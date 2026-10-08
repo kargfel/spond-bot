@@ -19,6 +19,7 @@ import contextlib
 import logging
 import time
 import uuid as _uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import aiohttp
@@ -57,6 +58,55 @@ _RETRY_DEADLINE_S = 20.0
 _REJECTED_RETRIES = 3
 # Per-attempt cap so a hung connection cannot swallow the retry budget.
 _ATTEMPT_TIMEOUT = aiohttp.ClientTimeout(total=5)
+# A prepared connection older than this was never used (event changed, sniper lost): close it.
+_PREPARED_MAX_AGE_S = 120.0
+
+
+@dataclass
+class _Prepared:
+    """Everything the warmup got ready so the sniper can send the PUT without further setup:
+    a token that has just been checked, the member ID, and an already-open HTTPS connection."""
+
+    http: aiohttp.ClientSession
+    token: str
+    recipient_id: str
+    accepted: bool
+    invite_time: datetime | None
+    created: float
+
+    async def close(self) -> None:
+        with contextlib.suppress(Exception):
+            await self.http.close()
+
+    def matches(self, event: Event) -> bool:
+        """Still what the member wants? The sniper re-checks this against the row it just read."""
+        return (
+            self.accepted == (event.user_choice == CHOICE_ACCEPT)
+            and event.user_choice in (CHOICE_ACCEPT, CHOICE_DECLINE)
+            and _same_instant(self.invite_time, event.invite_time)
+        )
+
+
+def _same_instant(a: datetime | None, b: datetime | None) -> bool:
+    if a is None or b is None:
+        return a is b
+    return _aware(a) == _aware(b)
+
+
+_PREPARED: dict[_uuid.UUID, _Prepared] = {}
+
+
+async def _discard_prepared(event_id: _uuid.UUID) -> None:
+    prepared = _PREPARED.pop(event_id, None)
+    if prepared:
+        await prepared.close()
+
+
+async def sweep_prepared() -> None:
+    """Close prepared connections nobody used (called by the executioner every minute)."""
+    cutoff = time.monotonic() - _PREPARED_MAX_AGE_S
+    for event_id in [k for k, v in _PREPARED.items() if v.created < cutoff]:
+        await _discard_prepared(event_id)
 
 
 async def _write_rsvp_log(
@@ -128,6 +178,7 @@ def _phase_timings(rsvp_log: RsvpLog, db_event: Event, timings: dict | None) -> 
     if resp is not None:
         out["response_ms"] = resp
     out["attempts"] = timings["attempts"]
+    out["prepared"] = bool(timings.get("prepared"))
     return out
 
 
@@ -148,7 +199,12 @@ def _retry_delay(exc: Exception, retries: int, elapsed: float) -> float | None:
 
 
 async def _submit_with_retries(
-    db: AsyncSession, user: User, db_event: Event, accepted: bool, timings: dict
+    db: AsyncSession,
+    user: User,
+    db_event: Event,
+    accepted: bool,
+    timings: dict,
+    prepared: _Prepared | None = None,
 ) -> datetime:
     """Call _submit_rsvp until it works or the error is final. Fills timings['retries'].
 
@@ -160,11 +216,13 @@ async def _submit_with_retries(
     auth_refreshed = False
     while True:
         try:
+            attempt_prepared, prepared = prepared, None  # only the first attempt rides the prepared connection
             return await _submit_rsvp(
                 db, user, db_event.spond_event_id, accepted,
                 force_refresh=force_refresh,
                 resolved_recipient_id=timings.get("recipient_id") or db_event.resolved_recipient_id,
                 timings=timings,
+                prepared=attempt_prepared,
             )
         except SpondAuthError:
             if auth_refreshed:
@@ -188,6 +246,7 @@ async def _submit_with_retries(
 
 async def run_executioner() -> None:
     """Entry point called by APScheduler. Never raises — logs all errors."""
+    await sweep_prepared()
     now = datetime.now(timezone.utc)
 
     async with AsyncSessionLocal() as db:
@@ -215,8 +274,16 @@ async def run_executioner() -> None:
     )
 
 
-async def _process_event(event: Event) -> None:
-    """Handle a single RSVP submission with one automatic retry on 401."""
+async def _process_event(event: Event, prepared: _Prepared | None = None) -> None:
+    """Handle a single RSVP submission (retrying transient failures), optionally on a prepared connection."""
+    try:
+        await _process_event_inner(event, prepared)
+    finally:
+        if prepared:
+            await prepared.close()
+
+
+async def _process_event_inner(event: Event, prepared: _Prepared | None) -> None:
     fired_at = datetime.now(timezone.utc)
     rsvp_log: RsvpLog | None = None
 
@@ -263,7 +330,7 @@ async def _process_event(event: Event) -> None:
         action = "ACCEPT" if accepted else "DECLINE"
 
         try:
-            submitted_at = await _submit_with_retries(db, user, db_event, accepted, timings)
+            submitted_at = await _submit_with_retries(db, user, db_event, accepted, timings, prepared)
             retries = timings["retries"]
             db_event.status = STATUS_PROCESSED
             db_event.error_message = None
@@ -366,16 +433,41 @@ async def _submit_rsvp(
     force_refresh: bool = False,
     resolved_recipient_id: str | None = None,
     timings: dict | None = None,
+    prepared: _Prepared | None = None,
 ) -> datetime:
     """Obtain a fresh token, resolve recipient ID, fire the RSVP. Returns submitted_at.
 
-    If resolved_recipient_id is known (cached by warmup or an earlier attempt), skip the
-    get_bulk_events and resolve_recipient_id API calls entirely. force_refresh only forces a
-    re-login; the recipient ID does not depend on the token.
+    With `prepared` (warmup output) the PUT goes straight out on its open connection: no token
+    handling, no lookups, no handshake. Otherwise, if resolved_recipient_id is known (cached by
+    warmup or an earlier attempt) the getBulk and /groups lookups are skipped. force_refresh only
+    forces a re-login; the recipient ID does not depend on the token.
 
-    timings, if given, is filled with: recipient_id, attempts, first_sent_at, request_ms, done_at.
+    timings, if given, is filled with: prepared, recipient_id, attempts, first_sent_at,
+    request_ms, done_at.
     """
     timings = timings if timings is not None else {}
+
+    async def send(http: aiohttp.ClientSession, token: str, recipient_id: str) -> datetime:
+        timings["recipient_id"] = recipient_id
+        logger.info(
+            "RSVP recipient resolved: user=%r event=%s recipient_id=%s (profile_id=%s)",
+            user.display_name, spond_event_id, recipient_id, user.profile_id,
+        )
+        submitted_at = datetime.now(timezone.utc)
+        timings["attempts"] = timings.get("attempts", 0) + 1
+        timings.setdefault("first_sent_at", submitted_at)
+        t0 = time.perf_counter()
+        try:
+            await spond_client.rsvp(http, token, spond_event_id, recipient_id, accepted)
+        finally:
+            timings["request_ms"] = round((time.perf_counter() - t0) * 1000)
+        timings["done_at"] = datetime.now(timezone.utc)
+        return submitted_at
+
+    if prepared is not None and not force_refresh:
+        timings["prepared"] = True
+        return await send(prepared.http, prepared.token, prepared.recipient_id)
+
     token = await ensure_fresh_token(db, user, force=force_refresh)
 
     async with aiohttp.ClientSession(cookie_jar=aiohttp.CookieJar(), timeout=_ATTEMPT_TIMEOUT) as http:
@@ -389,23 +481,7 @@ async def _submit_rsvp(
             recipient_id = await spond_client.resolve_recipient_id(
                 http, token, raw_event, user.login, user.profile_id  # type: ignore[arg-type]
             )
-        timings["recipient_id"] = recipient_id
-
-        logger.info(
-            "RSVP recipient resolved: user=%r event=%s recipient_id=%s (profile_id=%s)",
-            user.display_name, spond_event_id, recipient_id, user.profile_id,
-        )
-
-        submitted_at = datetime.now(timezone.utc)
-        timings["attempts"] = timings.get("attempts", 0) + 1
-        timings.setdefault("first_sent_at", submitted_at)
-        t0 = time.perf_counter()
-        try:
-            await spond_client.rsvp(http, token, spond_event_id, recipient_id, accepted)
-        finally:
-            timings["request_ms"] = round((time.perf_counter() - t0) * 1000)
-        timings["done_at"] = datetime.now(timezone.utc)
-        return submitted_at
+        return await send(http, token, recipient_id)
 
 
 # ---------------------------------------------------------------------------
@@ -457,15 +533,26 @@ def cancel_sniper(scheduler: AsyncIOScheduler, event_id: _uuid.UUID) -> None:
     with contextlib.suppress(JobLookupError):
         scheduler.remove_job(_sniper_job_id(event_id))
     cancel_warmup(scheduler, event_id)
+    asyncio.create_task(_discard_prepared(event_id))
     asyncio.create_task(bus.publish_admin("scheduler_changed", {"action": "cancelled", "event_id": str(event_id)}))
 
 
 async def run_sniper(event_id: _uuid.UUID) -> None:
     """One-shot job called by APScheduler at invite_time."""
-    async with AsyncSessionLocal() as db:
-        event = await db.get(Event, event_id)
-    if event:
-        await _process_event(event)
+    prepared = _PREPARED.pop(event_id, None)
+    try:
+        async with AsyncSessionLocal() as db:
+            event = await db.get(Event, event_id)
+        if prepared and not (event and prepared.matches(event)):
+            # Decision or opening time changed since the warmup: don't send stale data.
+            await prepared.close()
+            prepared = None
+        if event:
+            await _process_event(event, prepared)
+            prepared = None  # _process_event closed it
+    finally:
+        if prepared:
+            await prepared.close()
 
 
 # ---------------------------------------------------------------------------
@@ -552,6 +639,7 @@ async def run_warmup(event_id: _uuid.UUID) -> None:
             logger.debug(
                 "Warmup cached recipient_id=%s for event %s", recipient_id, event_id
             )
+            await _open_prepared(db, user, event, token, recipient_id)
         except Exception as exc:
             logger.warning(
                 "Warmup failed for event %s: %s — sniper will fall back to full resolution",
@@ -559,3 +647,33 @@ async def run_warmup(event_id: _uuid.UUID) -> None:
                 exc,
             )
 
+
+
+async def _open_prepared(db: AsyncSession, user: User, event: Event, token: str, recipient_id: str) -> None:
+    """Open the HTTPS connection to Spond now and prove the token works, so the sniper only has to send.
+
+    Never raises: on any problem the sniper simply takes the normal path.
+    """
+    http = aiohttp.ClientSession(
+        cookie_jar=aiohttp.CookieJar(),
+        timeout=_ATTEMPT_TIMEOUT,
+        connector=aiohttp.TCPConnector(ttl_dns_cache=300),
+    )
+    try:
+        try:
+            await spond_client.get_profile_id(http, token)
+        except SpondAuthError:
+            token = await ensure_fresh_token(db, user, force=True)
+            await spond_client.get_profile_id(http, token)
+        await _discard_prepared(event.id)
+        _PREPARED[event.id] = _Prepared(
+            http=http,
+            token=token,
+            recipient_id=recipient_id,
+            accepted=event.user_choice == CHOICE_ACCEPT,
+            invite_time=event.invite_time,
+            created=time.monotonic(),
+        )
+    except Exception as exc:
+        await http.close()
+        logger.warning("Warmup could not pre-connect for event %s: %s — sniper will connect itself", event.id, exc)
